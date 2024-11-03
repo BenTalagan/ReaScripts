@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" commit="60103e6afcf3287bd81140cac24c62a2bb6f96ef" name="ReaTeam Scripts">
+<index version="1" commit="0d8b705bd4116229a0632264470d953b2b6dda1e" name="ReaTeam Scripts">
   <category name="Cursor">
     <reapack name="amagalma_Move edit cursor to closest item edge (among the selected items).lua" type="script" desc="Move edit cursor to closest item edge (among the selected items)">
       <metadata>
@@ -26767,6 +26767,24 @@ Fix SWS Startup / Lokasenna Radial Menu bug]]></changelog>
         <source main="main">https://github.com/ReaTeam/ReaScripts/raw/9e96eea791fd93d8151a7dce11d16995d67f3faa/Various/tagirijus_Save%20project%20and%20move%20backups.lua</source>
       </version>
     </reapack>
+    <reapack name="talagan_Scroll TCP to track currently edited in active MIDI editor.lua" type="script" desc="Scroll TCP to track currently edited in active MIDI editor">
+      <metadata>
+        <description><![CDATA[{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}{\f1 \fmodern Courier;}}
+{\colortbl;\red255\green0\blue0;\red0\green0\blue255;}
+\widowctrl\hyphauto
+
+{\pard \ql \f0 \sa180 \li0 \fi0 It may happen that you are working in the MIDI editor and want to access the edited track TCP's but unfortunately, it's not on screen, you don't want to scroll by yourself, and you don't want to break your track selection.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 This action can be used to scroll the TCP to have the currently edited MIDI take's track at the top, so you can interract with the track controls and keep your track selection and the rest of your current screen layout intact.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 There's a good chance that if you need this, you'll use it as a small brick in custom actions in conjunction with other ones (scroll, resize, fit, etc).\par}
+}
+]]></description>
+        <link rel="donation">https://www.paypal.com/donate/?business=3YEZMY9D6U8NC&amp;no_recurring=1&amp;currency_code=EUR</link>
+      </metadata>
+      <version name="0.5.0" author="Ben 'Talagan' Babut" time="2024-11-03T13:02:27Z">
+        <changelog><![CDATA[Initial release.]]></changelog>
+        <source main="main midi_editor">https://github.com/BenTalagan/ReaScripts/raw/0d8b705bd4116229a0632264470d953b2b6dda1e/Various/talagan_Scroll%20TCP%20to%20track%20currently%20edited%20in%20active%20MIDI%20editor.lua</source>
+      </version>
+    </reapack>
     <reapack name="timtam_IntelliFreeze.lua" type="script" desc="IntelliFreeze">
       <metadata>
         <description><![CDATA[{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}{\f1 Courier;}}
@@ -27123,17 +27141,17 @@ Streamable link
     </reapack>
   </category>
   <metadata>
-    <description><![CDATA[{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}{\f1 Courier;}}
+    <description><![CDATA[{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}{\f1 \fmodern Courier;}}
 {\colortbl;\red255\green0\blue0;\red0\green0\blue255;}
 \widowctrl\hyphauto
 
-{\pard \ql \f0 \sa180 \li0 \fi0 \b \fs36 ReaTeam Scripts Repository\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel0 \b \fs36 ReaTeam Scripts Repository\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 {\cf1 [image: https://github.com/ReaTeam/ReaScripts/workflows/check/badge.svg]\cf0}\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 Community-maintained collection of scripts for REAPER.\par}
-{\pard \ql \f0 \sa180 \li0 \fi0 \b \fs32 Installation\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel1 \b \fs32 Installation\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 Copy and paste this URL in Extensions > ReaPack > Import a repository:\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 \f1 https://github.com/ReaTeam/ReaScripts/raw/master/index.xml\par}
-{\pard \ql \f0 \sa180 \li0 \fi0 \b \fs32 Contributing\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel1 \b \fs32 Contributing\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 Use {\field{\*\fldinst{HYPERLINK "https://reapack.com/upload/reascript"}}{\fldrslt{\ul
 https://reapack.com/upload/reascript
 }}}
