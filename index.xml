@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" commit="4df6b821c03dbc1fbd5b68e9882355b3d6b3a7b9" name="ReaTeam Scripts">
+<index version="1" commit="2fcc87ec3f546310a7e1dd50d640240fb58556b2" name="ReaTeam Scripts">
   <category name="Cursor">
     <reapack name="amagalma_Move edit cursor to closest item edge (among the selected items).lua" type="script" desc="Move edit cursor to closest item edge (among the selected items)">
       <metadata>
@@ -27228,18 +27228,42 @@ Streamable link
       </version>
     </reapack>
   </category>
-  <metadata>
-    <description><![CDATA[{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}{\f1 Courier;}}
+  <category name="View">
+    <reapack name="talagan_Docking tools.lua" type="script" desc="Docking tools : actions to resize docks">
+      <metadata>
+        <description><![CDATA[{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}{\f1 \fmodern Courier;}}
 {\colortbl;\red255\green0\blue0;\red0\green0\blue255;}
 \widowctrl\hyphauto
 
-{\pard \ql \f0 \sa180 \li0 \fi0 \b \fs36 ReaTeam Scripts Repository\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 This package provide actions to quickly resize the MIDI dock and the bottommost dock.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 You can copy / paste the "... (500).lua" action files and modify their name to put a custom height instead of 500.\par}
+}
+]]></description>
+      </metadata>
+      <version name="0.1" author="Ben 'Talagan' Babut" time="2024-11-25T20:42:23Z">
+        <changelog><![CDATA[- Initial Release]]></changelog>
+        <source main="main" file="talagan_Maximize bottommost dock.lua">https://github.com/BenTalagan/ReaScripts/raw/2fcc87ec3f546310a7e1dd50d640240fb58556b2/View/talagan_Docking%20tools/actions/talagan_Maximize%20bottommost%20dock.lua</source>
+        <source main="main" file="talagan_Minimize bottommost dock.lua">https://github.com/BenTalagan/ReaScripts/raw/2fcc87ec3f546310a7e1dd50d640240fb58556b2/View/talagan_Docking%20tools/actions/talagan_Minimize%20bottommost%20dock.lua</source>
+        <source main="main" file="talagan_Set bottommost dock height (500).lua">https://github.com/BenTalagan/ReaScripts/raw/2fcc87ec3f546310a7e1dd50d640240fb58556b2/View/talagan_Docking%20tools/actions/talagan_Set%20bottommost%20dock%20height%20(500).lua</source>
+        <source main="main midi_editor" file="talagan_Maximize dock containing active MIDI Editor.lua">https://github.com/BenTalagan/ReaScripts/raw/2fcc87ec3f546310a7e1dd50d640240fb58556b2/View/talagan_Docking%20tools/actions/talagan_Maximize%20dock%20containing%20active%20MIDI%20Editor.lua</source>
+        <source main="main midi_editor" file="talagan_Minimize dock containing active MIDI Editor.lua">https://github.com/BenTalagan/ReaScripts/raw/2fcc87ec3f546310a7e1dd50d640240fb58556b2/View/talagan_Docking%20tools/actions/talagan_Minimize%20dock%20containing%20active%20MIDI%20Editor.lua</source>
+        <source main="main midi_editor" file="talagan_Set dock containing active MIDI Editor height (500).lua">https://github.com/BenTalagan/ReaScripts/raw/2fcc87ec3f546310a7e1dd50d640240fb58556b2/View/talagan_Docking%20tools/actions/talagan_Set%20dock%20containing%20active%20MIDI%20Editor%20height%20(500).lua</source>
+        <source file="talagan_Docking tools/docking_lib.lua">https://github.com/BenTalagan/ReaScripts/raw/2fcc87ec3f546310a7e1dd50d640240fb58556b2/View/talagan_Docking%20tools/docking_lib.lua</source>
+      </version>
+    </reapack>
+  </category>
+  <metadata>
+    <description><![CDATA[{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}{\f1 \fmodern Courier;}}
+{\colortbl;\red255\green0\blue0;\red0\green0\blue255;}
+\widowctrl\hyphauto
+
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel0 \b \fs36 ReaTeam Scripts Repository\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 {\cf1 [image: https://github.com/ReaTeam/ReaScripts/workflows/check/badge.svg]\cf0}\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 Community-maintained collection of scripts for REAPER.\par}
-{\pard \ql \f0 \sa180 \li0 \fi0 \b \fs32 Installation\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel1 \b \fs32 Installation\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 Copy and paste this URL in Extensions > ReaPack > Import a repository:\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 \f1 https://github.com/ReaTeam/ReaScripts/raw/master/index.xml\par}
-{\pard \ql \f0 \sa180 \li0 \fi0 \b \fs32 Contributing\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel1 \b \fs32 Contributing\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 Use {\field{\*\fldinst{HYPERLINK "https://reapack.com/upload/reascript"}}{\fldrslt{\ul
 https://reapack.com/upload/reascript
 }}}
