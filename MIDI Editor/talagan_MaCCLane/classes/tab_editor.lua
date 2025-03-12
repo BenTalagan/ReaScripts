@@ -3,16 +3,16 @@
 -- @license MIT
 -- @description This file is part of MaCCLane
 
-local UTILS           = require "modules/utils"
-local MACCLContext    = require "modules/context"
 local TabParams       = require "modules/tab_params"
-local CHUNK           = require "modules/chunk"
-local VELLANE         = require "modules/vellane"
+local TabState        = require "modules/tab_state"
+
+local MACCLContext    = require "modules/context"
 local CCLANELIST      = require "modules/cc_lane_list"
+
+local UTILS           = require "modules/utils"
 local MIDI            = require "modules/midi"
 local TIMELINE        = require "modules/timeline"
 local GRID            = require "modules/grid"
-local PITCHSNAP       = require "modules/pitch_snap"
 
 local ComboSearch     = require "classes/combo_search"
 local Tab             = require "classes/tab"
@@ -206,6 +206,7 @@ end
 function TabEditor:currentChanComboBox(ctx, params)
     local selectableLabel = function (chan)
         if chan == 'bypass' then return 'Bypass##current_chan_bypass' end
+        if chan == 'record' then return 'Record##current_chan_bypass' end
         return 'Chan ' .. (chan + 1) .. '##current_chan_' .. (chan + 1)
     end
 
@@ -214,8 +215,15 @@ function TabEditor:currentChanComboBox(ctx, params)
     ImGui.SetNextItemWidth(ctx, 100)
     local mode = params.current
     if ImGui.BeginCombo(ctx, "##current_chan_combo", selectableLabel(mode)) then
-        for i=-1, 15 do
-            local s             = (i == -1 and 'bypass' or i)
+        for i=-1, 16 do
+            local s = nil
+
+            if i == -1      then s = 'bypass'
+            elseif i == 16  then s = 'record'
+            else
+                s = i
+            end
+
             local is_selected   = (s == mode)
 
             if ImGui.Selectable(ctx, selectableLabel(s), is_selected) then
@@ -386,7 +394,6 @@ function TabEditor:gfxDockingSection()
     local mec               = self.mec
     local tab               = self.tab
     local ctx               = MACCLContext.ImGuiContext
-    local meinfo            = mec:editorInfo()
 
     local params    = tab.params.docking
 
@@ -414,7 +421,7 @@ function TabEditor:gfxDockingSection()
         ImGui.SameLine(ctx)
         MoveCursorY(ctx, -3)
         ReadButton(ctx, "##read_button", function()
-            tab:readDockHeight()
+            TabState.ReadDockHeight(tab)
         end)
     end
     ImGui.EndGroup(ctx)
@@ -452,7 +459,7 @@ function TabEditor:gfxDockingSection()
 
         ImGui.SameLine(ctx); MoveCursorY(ctx, -3)
         ReadButton(ctx, "##read_button", function()
-            tab:readWindowBounds()
+            TabState.ReadWindowBounds(tab)
         end)
     end
 
@@ -460,60 +467,12 @@ function TabEditor:gfxDockingSection()
     ImGui.PopID(ctx)
 end
 
-function TabEditor:patchVellaneEntries(dst_table, src_table, mode)
-    if mode == 'replace' then
-        for k, v in pairs(dst_table) do dst_table[k] = nil end
-        for k, v in pairs(src_table) do
-            dst_table[#dst_table+1] = v
-        end
-    elseif mode == 'add_missing' then
-        local lookup = {}
-        for k, v in pairs(dst_table) do lookup[v.num] = v end
-        for k, v in pairs(src_table) do
-            local existing_entry = lookup[v.num]
-            if not existing_entry then
-                -- Add missing entry
-                dst_table[#dst_table+1] = v
-            end
-        end
-    elseif mode == 'merge' then
-        local lookup = {}
-        for k, v in pairs(dst_table) do lookup[v.num] = v end
-        for k, v in pairs(src_table) do
-            local existing_entry = lookup[v.num]
-            if not existing_entry then
-                -- Add missing entry
-                dst_table[#dst_table+1] = v
-            else
-                -- Remplace all values in existing entry
-                for kk, vv in pairs(v) do
-                    existing_entry[kk] = vv
-                end
-            end
-        end
-    end
-end
-
-function TabEditor:getVellanes(meinfo)
-    local ichunk    = CHUNK.getItemChunk(meinfo.item)
-    local vellanes  = VELLANE.readVellanesFromChunk(ichunk, meinfo.take)
-
-    for _, e in ipairs(vellanes.entries) do
-        if e.num == 128 then
-            local tchunk = CHUNK.getTrackChunk(meinfo.track)
-            e.snap = PITCHSNAP.hasPitchBendSnap(tchunk)
-        end
-    end
-    return vellanes
-end
-
 function TabEditor:readCCLanePopup()
-    local mec           = self.mec
-    local tab           = self.tab
-    local ctx           = MACCLContext.ImGuiContext
-    local meinfo        = mec:editorInfo()
+    local mec               = self.mec
+    local tab               = self.tab
+    local ctx               = MACCLContext.ImGuiContext
+    local meinfo            = mec:editorInfo()
     local cc_lane_params    = tab.params.cc_lanes
-    local entries       = cc_lane_params.entries
 
     if ImGui.BeginPopup(ctx, "get_cc_lane_popup" ) then
 
@@ -521,20 +480,20 @@ function TabEditor:readCCLanePopup()
         ImGui.MenuItem(ctx, "From editor ...", "", false, false)
         if ImGui.MenuItem(ctx, "Displayed CC lanes (Add missing)") then
             if meinfo.item then
-                local vellanes = self:getVellanes(meinfo)
-                self:patchVellaneEntries(entries, vellanes.entries, 'add_missing')
+                local vellanes = TabState.ReadVellanes(tab)
+                TabState.PatchVellaneEntries(cc_lane_params.entries, vellanes.entries, 'add_missing')
             end
         end
         if ImGui.MenuItem(ctx, "Displayed CC lanes (Merge)") then
             if meinfo.item then
-                local vellanes = self:getVellanes(meinfo)
-                self:patchVellaneEntries(entries, vellanes.entries, 'merge')
+                local vellanes = TabState.ReadVellanes(tab)
+                TabState.PatchVellaneEntries(cc_lane_params.entries, vellanes.entries, 'merge')
             end
         end
         if ImGui.MenuItem(ctx, "Displayed CC lanes (Replace)") then
             if meinfo.item then
-                local vellanes = self:getVellanes(meinfo)
-                self:patchVellaneEntries(entries, vellanes.entries, 'replace')
+                local vellanes = TabState.ReadVellanes(tab)
+                TabState.PatchVellaneEntries(cc_lane_params.entries, vellanes.entries, 'replace')
             end
         end
         ImGui.PopID(ctx)
@@ -575,9 +534,9 @@ function TabEditor:readCCLanePopup()
             end
             local new_potential_entries = {}
             for cc_lane, _ in pairs(cc_lookup) do
-                new_potential_entries[#new_potential_entries+1] = VELLANE.newVirginVellane(cc_lane)
+                new_potential_entries[#new_potential_entries+1] = TabState.NewVirginVellane(cc_lane)
             end
-            self:patchVellaneEntries(entries, new_potential_entries, 'add_missing')
+            TabState.PatchVellaneEntries(cc_lane_params.entries, new_potential_entries, 'add_missing')
         end
         ImGui.PopID(ctx)
 
@@ -590,9 +549,9 @@ function TabEditor:readCCLanePopup()
             crawlTakeForEvents(mec.take, cc_lookup)
             local new_potential_entries = {}
             for cc_lane, _ in pairs(cc_lookup) do
-                new_potential_entries[#new_potential_entries+1] = VELLANE.newVirginVellane(cc_lane)
+                new_potential_entries[#new_potential_entries+1] = TabState.NewVirginVellane(cc_lane)
             end
-            self:patchVellaneEntries(entries, new_potential_entries, 'add_missing')
+            TabState.PatchVellaneEntries(cc_lane_params.entries, new_potential_entries, 'add_missing')
         end
         ImGui.PopID(ctx)
 
@@ -852,7 +811,7 @@ function TabEditor:gfxCCLaneSection()
 
         PushCyanStyle(ctx)
         if ImGui.Button(ctx, " + ##cc_lane_add") then
-            entries[#entries+1] = VELLANE.newVirginVellane(1)
+            entries[#entries+1] = TabState.NewVirginVellane(1)
         end
         PopCyanStyle(ctx)
 
@@ -1004,7 +963,6 @@ function TabEditor:gfxPianoRollSection()
     local mec               = self.mec
     local tab               = self.tab
     local ctx               = MACCLContext.ImGuiContext
-    local meinfo            = mec:editorInfo()
     local params            = tab.params.piano_roll
     local mode              = params.mode
 
@@ -1050,7 +1008,7 @@ function TabEditor:gfxPianoRollSection()
 
             ImGui.TableNextColumn(ctx)
             ReadButton(ctx, "##get_high", function()
-                tab:readCurrentPianoRollHighNote()
+                TabState.ReadCurrentPianoRollHighNote(tab)
             end)
 
             ImGui.PushTabStop(ctx, false)
@@ -1077,7 +1035,7 @@ function TabEditor:gfxPianoRollSection()
 
             ImGui.TableNextColumn(ctx)
             ReadButton(ctx, "##get_low", function()
-                tab:readCurrentPianoRollLowNote()
+                TabState.ReadCurrentPianoRollLowNote(tab)
             end)
 
             ImGui.EndTable(ctx)
@@ -1163,7 +1121,7 @@ function TabEditor:gfxMidiChanSection()
 
             ImGui.TableNextColumn(ctx)
             ReadButton(ctx, "##read_midi_chans_button", function()
-                tab:readMidiChans()
+                TabState.ReadMidiChans(tab)
             end)
 
             ImGui.EndTable(ctx)
@@ -1346,7 +1304,7 @@ function TabEditor:gfxFirstLine()
 end
 
 function TabEditor:gfxOtherParamsSection()
-    local mec       = self.mec
+    local tab       = self.tab
     local ctx       = MACCLContext.ImGuiContext
     local b, v
 
@@ -1366,9 +1324,7 @@ function TabEditor:gfxOtherParamsSection()
 
             ImGui.SameLine(ctx); MoveCursorY(ctx, -3)
             ReadButton(ctx, '##R', function()
-                if not mec.take then return end
-
-                cparams.type = GRID.GetColoringType(mec)
+                TabState.ReadColoring(tab)
             end)
         end
         ImGui.PopID(ctx)
@@ -1422,17 +1378,7 @@ function TabEditor:gfxOtherParamsSection()
 
             ImGui.SameLine(ctx); MoveCursorY(ctx, -3)
             ReadButton(ctx, '##R', function()
-                if not mec.take then return end
-
-                local val, type, swing = GRID.GetMIDIEditorGrid(mec)
-
-                local p, q, err = GRID.ToFrac(val)
-                local str = "" .. p .. "/" .. q
-                if q == 1 then str = "" .. p end
-
-                cparams.val      = str
-                cparams.type     = type
-                cparams.swing    = math.floor(swing * 100)
+                TabState.ReadGrid(tab)
             end)
         end
         ImGui.PopID(ctx)

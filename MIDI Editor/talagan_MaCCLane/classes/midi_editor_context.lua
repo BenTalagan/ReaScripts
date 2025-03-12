@@ -291,7 +291,7 @@ function MEContext:redraw()
     local bgcol   	= reaper.GetThemeColor("col_main_bg")
 	local r,g,b 	= reaper.ColorFromNative(bgcol)
 
-    bgcol 			= 0xFF000000 | (r << 16) | (g << 8) | b
+    self.bgcol 		= 0xFF000000 | (r << 16) | (g << 8) | b
 
     local w = reaper.JS_LICE_GetWidth(mec.bitmap)
     local h = reaper.JS_LICE_GetHeight(mec.bitmap)
@@ -300,7 +300,7 @@ function MEContext:redraw()
     reaper.JS_Window_InvalidateRect(me, mec.xpos, mec.ypos, mec.xpos + mec.w, mec.ypos + mec.h, true)
 
     -- Cleanup full BG
-    reaper.JS_LICE_FillRect(mec.bitmap, 0, 0, w, h, bgcol, 1, "COPY")
+    reaper.JS_LICE_FillRect(mec.bitmap, 0, 0, w, h, self.bgcol, 1, "COPY")
 
     if reaper.MIDIEditor_GetMode(self.me) == 1 then
         -- Don't draw tabs in list view mode
