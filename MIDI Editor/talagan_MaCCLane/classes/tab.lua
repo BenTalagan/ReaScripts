@@ -17,7 +17,7 @@ local PIANOROLL       = require "modules/piano_roll"
 local TIMELINE        = require "modules/timeline"
 local GRID            = require "modules/grid"
 
-local TabParams       = require "modules/tab_params"
+local TabState        = require "modules/tab_state"
 
 local Tab = {}
 Tab.__index = Tab
@@ -58,91 +58,7 @@ end
 -- So all backward compatibility should be handled here
 -- As well as default value assignments
 function Tab:_sanitize()
-
-    self.params.title                               = self.params.title or "???"
-
-    self.params.role                                = self.params.role or ''
-    self.params.priority                            = self.params.priority or 0
-
-    self.params.color                               = self.params.color or {}
-    self.params.color.mode                          = TabParams.ColorMode:sanitize(self.params.color.mode, 'bypass')
-    self.params.color.color                         = self.params.color.color or 0xFFFFFFFF
-
-    self.params.margin                              = self.params.margin or {}
-    self.params.margin.mode                         = TabParams.MarginMode:sanitize(self.params.margin.mode, 'bypass')
-    self.params.margin.margin                       = self.params.margin.margin or 10
-
-    -- Dimensions / Position
-    self.params.docking                             = self.params.docking or {}
-    self.params.docking.mode                        = TabParams.DockingMode:sanitize(self.params.docking.mode, 'bypass')
-
-    self.params.docking.if_docked                   = self.params.docking.if_docked or {}
-    self.params.docking.if_docked.mode              = TabParams.IfDockedMode:sanitize(self.params.docking.if_docked.mode, 'bypass')
-    self.params.docking.if_docked.size              = self.params.docking.if_docked.size or 500
-
-    self.params.docking.if_windowed                 = self.params.docking.if_windowed or {}
-    self.params.docking.if_windowed.mode            = TabParams.IfWindowedMode:sanitize(self.params.docking.if_windowed.mode, 'bypass')
-    self.params.docking.if_windowed.coords          = self.params.docking.if_windowed.coords or { x=0, y=0, w=800, h=600 }
-
-    -- Time window
-    self.params.time_window                         = self.params.time_window or {}
-
-    self.params.time_window.positioning             = self.params.time_window.positioning or {}
-    self.params.time_window.positioning.mode        = TabParams.TimeWindowPosMode:sanitize(self.params.time_window.positioning.mode, 'bypass')
-    self.params.time_window.positioning.anchoring   = TabParams.TimeWindowAnchoring:sanitize(self.params.time_window.positioning.anchoring, 'left')
-    self.params.time_window.positioning.position    = self.params.time_window.positioning.position or '0'
-
-    self.params.time_window.sizing                  = self.params.time_window.sizing or {}
-    self.params.time_window.sizing.mode             = TabParams.TimeWindowSizingMode:sanitize(self.params.time_window.sizing.mode, 'bypass')
-    self.params.time_window.sizing.size             = self.params.time_window.sizing.size or '1'
-
-    -- CC Lanes
-    self.params.cc_lanes                            = self.params.cc_lanes          or {}
-    self.params.cc_lanes.mode                       = TabParams.CCLaneMode:sanitize(self.params.cc_lanes.mode, 'bypass')
-    self.params.cc_lanes.entries                    = self.params.cc_lanes.entries  or {}
-
-    for i,v in pairs(self.params.cc_lanes.entries) do
-        v.height                                    = v.height or 0
-        v.inline_ed_height                          = v.inline_ed_height or 0
-        v.zoom_factor                               = v.zoom_factor or 1
-        v.zoom_offset                               = v.zoom_offset or 0
-    end
-
-    -- Piano Roll
-    self.params.piano_roll                          = self.params.piano_roll or {}
-    self.params.piano_roll.mode                     = TabParams.PianoRollMode:sanitize(self.params.piano_roll.mode, 'bypass')
-    self.params.piano_roll.low_note                 = self.params.piano_roll.low_note or 0
-    self.params.piano_roll.high_note                = self.params.piano_roll.high_note or 127
-    self.params.piano_roll.fit_time_scope           = TabParams.PianoRollFitTimeScope:sanitize(self.params.piano_roll.fit_time_scope , 'visible')
-    self.params.piano_roll.fit_owner_scope          = TabParams.PianoRollFitOwnerScope:sanitize(self.params.piano_roll.fit_owner_scope , 'track')
-    self.params.piano_roll.fit_chan_scope           = self.params.piano_roll.fit_chan_scope or -2
-
-    -- Midi Chans
-    self.params.midi_chans                          = self.params.midi_chans or {}
-    self.params.midi_chans.mode                     = TabParams.MidiChanMode:sanitize(self.params.midi_chans.mode, 'bypass')
-    self.params.midi_chans.bits                     = self.params.midi_chans.bits or 0
-    self.params.midi_chans.current                  = self.params.midi_chans.current or 'bypass' -- 'bypass' or number. It's not an enum.
-
-    -- Actions
-    self.params.actions                             = self.params.actions or {}
-    self.params.actions.mode                        = TabParams.ActionMode:sanitize(self.params.actions.mode, 'bypass')
-    self.params.actions.entries                     = self.params.actions.entries or {}
-
-    for i,v in pairs(self.params.actions.entries) do
-        v.section                                   = v.section or 'midi_editor'
-        v.id                                        = v.id or 0
-        v.when                                      = TabParams.ActionWhen:sanitize(v.when, 'after')
-    end
-
-    self.params.grid                                = self.params.grid or {}
-    self.params.grid.mode                           = TabParams.GridMode:sanitize(self.params.grid.mode, 'bypass')
-    self.params.grid.val                            = self.params.grid.val      or '' -- save as string
-    self.params.grid.type                           = TabParams.GridType:sanitize(self.params.grid.type, 'straight')
-    self.params.grid.swing                          = self.params.grid.swing    or 0  -- save as number
-
-    self.params.coloring                            = self.params.coloring or {}
-    self.params.coloring.mode                       = TabParams.MEColoringMode:sanitize(self.params.coloring.mode, 'bypass')
-    self.params.coloring.type                       = TabParams.MEColoringType:sanitize(self.params.coloring.type, 'track')
+    TabState.Sanitize(self)
 end
 
 -- Mark the record as non dirty
@@ -150,6 +66,20 @@ end
 function Tab:undirty()
     self.owner_before_save      = self.owner
     self.owner_type_before_save = self.owner_type
+
+    -- Denormalize some states
+    self.is_statefull = (self.params.grid.mode == 'record') or
+        (self.params.docking.mode == 'record') or
+            (self.params.docking.if_docked.mode == 'record') or
+            (self.params.docking.if_windowed.mode == 'record') or
+        (self.params.time_window.positioning.mode == 'record') or
+        (self.params.time_window.sizing.mode == 'record') or
+        (self.params.cc_lanes.mode == 'record') or
+        (self.params.piano_roll.mode == 'record') or
+        (self.params.midi_chans.mode == 'record') or
+        (self.params.coloring.mode == 'record') or
+        (self.params.midi_chans.current == 'record')
+
 end
 
 function Tab:UUID()
@@ -229,6 +159,10 @@ function Tab:removeFromOwner(owner_type, owner)
     local all_owner_tabs = Serializing.loadTabsFromEntity(owner_type, owner)
     all_owner_tabs[self:UUID()] = nil
     Serializing.saveTabsToEntitity(owner_type, owner, all_owner_tabs)
+end
+
+function Tab:isStateFull()
+    return self.is_statefull
 end
 
 function Tab:save()
@@ -428,6 +362,30 @@ function Tab:draw(mec, x)
         reaper.JS_LICE_FillRect(mec.bitmap,   self.last_x,        self.last_y,        fullw, fullh, tabcol, alpha, "COPY")
     end
 
+    if self:isStateFull() then
+        local crop = 2
+        --[[
+        reaper.JS_LICE_FillTriangle(mec.bitmap,
+            self.last_x + fullw, self.last_y + fullh - 5,
+            self.last_x + fullw, self.last_y + fullh,
+            self.last_x + fullw - 5, self.last_y + fullh,
+            mec.bgcol, 1, "COPY")
+            ]]
+        reaper.JS_LICE_FillTriangle(mec.bitmap,
+            self.last_x         , self.last_y,
+            self.last_x + crop  , self.last_y,
+            self.last_x         , self.last_y + crop,
+            mec.bgcol, 1, "COPY")
+
+        reaper.JS_LICE_FillTriangle(mec.bitmap,
+            self.last_x + fullw - 1 - crop  , self.last_y,
+            self.last_x + fullw - 1         , self.last_y,
+            self.last_x + fullw - 1         , self.last_y + crop,
+            mec.bgcol, 1, "COPY")
+
+        --reaper.JS_LICE_Line(mec.bitmap, self.last_x, self.last_y + fullh - 1 , self.last_x + fullw - 1, self.last_y + fullh - 1, 0xFF000000, 1, "COPY", false)
+    end
+
     -- Font color
     reaper.JS_LICE_SetFontColor(font, fontcol)
 
@@ -481,20 +439,19 @@ function Tab:_executeActions(when)
 end
 
 function Tab:_processLayouting()
-    local mec = self.mec
-    local me_section = D.SECTION_MIDI_EDITOR
-    local is_docked  = (reaper.GetToggleCommandStateEx(me_section, 40018) == 1)
+    local mec           = self.mec
+    local is_docked     = (reaper.GetToggleCommandStateEx(D.SECTION_MIDI_EDITOR, D.ACTION_ME_SET_DOCKED) == 1)
 
     if self.params.docking.mode == 'docked' then
         if not is_docked then
-            reaper.MIDIEditor_OnCommand(mec.me, 40018)
+            reaper.MIDIEditor_OnCommand(mec.me,  D.ACTION_ME_SET_DOCKED)
         end
     elseif self.params.docking.mode == 'windowed' then
         if is_docked then
-            reaper.MIDIEditor_OnCommand(mec.me, 40018)
+            reaper.MIDIEditor_OnCommand(mec.me,  D.ACTION_ME_SET_DOCKED)
         end
     end
-    is_docked  = (reaper.GetToggleCommandStateEx(me_section, 40018) == 1)
+    is_docked  = (reaper.GetToggleCommandStateEx(D.SECTION_MIDI_EDITOR, D.ACTION_ME_SET_DOCKED) == 1)
 
     if is_docked then
         local dock = DOCKING_LIB.findDockThatContainsWindow(mec.me)
@@ -528,7 +485,6 @@ end
 function Tab:_processVellanes()
     local mec = self.mec
     if self.params.cc_lanes.mode == 'custom' then
-
         local item_chunk    = CHUNK.getItemChunk(mec.item)
         local vellane_ctx   = VELLANE.readVellanesFromChunk(item_chunk, mec.take)
 
@@ -575,7 +531,7 @@ end
 
 function Tab:_processMidiChans()
     local mec = self.mec
-    if self.params.midi_chans.current ~= 'bypass' then
+    if self.params.midi_chans.current ~= 'bypass' and self.params.midi_chans.current ~= 'record' then
         -- "Set channel for new events on channel X"
         reaper.MIDIEditor_OnCommand(mec.me, 40482 + self.params.midi_chans.current)
     end
@@ -799,24 +755,6 @@ function Tab:onRightClick(mec, x, y)
     mec:openTabContextMenuOn(self)
 end
 
-function Tab:readCurrentPianoRollLowNote()
-    local mec    = self.mec
-    local params = self.params.piano_roll
-    local l, h = PIANOROLL.range(mec.me)
-    if l and h then
-        params.low_note  = l
-    end
-end
-
-function Tab:readCurrentPianoRollHighNote()
-    local mec    = self.mec
-    local params = self.params.piano_roll
-    local l, h = PIANOROLL.range(mec.me)
-    if l and h then
-        params.high_note  = h
-    end
-end
-
 function Tab:getActiveChanBits()
     local ACTION_TOGGLE_MIDI_CHAN = 40643
     local bits = 0
@@ -833,24 +771,6 @@ function Tab:getActiveChanBits()
     end
 
     return bits
-end
-
-function Tab:readMidiChans()
-    local params = self.params.midi_chans
-    params.bits  = self:getActiveChanBits()
-end
-
-function Tab:readWindowBounds()
-    local bounds = UTILS.JS_Window_GetBounds(self.mec.me, true)
-    self.params.docking.if_windowed.coords.x = bounds.l
-    self.params.docking.if_windowed.coords.y = bounds.b
-    self.params.docking.if_windowed.coords.w = bounds.w
-    self.params.docking.if_windowed.coords.h = bounds.h
-end
-
-function Tab:readDockHeight()
-    local bounds = UTILS.JS_Window_GetBounds(self.mec.me, false)
-    self.params.docking.if_docked.size = bounds.h + 20 -- For the bottom tab bar
 end
 
 ----------------------

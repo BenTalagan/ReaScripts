@@ -1,13 +1,13 @@
 --[[
 @description MaCCLane : Tabs for the MIDI Editor
-@version 0.1.7
+@version 0.1.8
 @author Ben 'Talagan' Babut
 @license MIT
 @donation https://www.paypal.com/donate/?business=3YEZMY9D6U8NC&no_recurring=1&currency_code=EUR
 @links
   Forum Thread : https://forum.cockos.com/showthread.php?t=298707
 @changelog
-  - [Bug Fix] [Linux] Wrong coordinate system leading to widget not appearing at all
+  - Record
 @provides
   [main=main] .
   [nomain] talagan_MaCCLane/classes/**/*.lua
