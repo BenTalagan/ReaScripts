@@ -7,7 +7,9 @@
 @links
   Forum Thread : https://forum.cockos.com/showthread.php?t=298707
 @changelog
-  - Record
+  - [Bug Fix] Setting ME grid does not work if global grid setting is set to "Measure"
+  - [Bug Fix] MaCCLane crash if tab editor grid module is set to custom and closing midi editor (thanks @Seventh Sam)
+  - [Feature] Record modes for every module
 @provides
   [main=main] .
   [nomain] talagan_MaCCLane/classes/**/*.lua

@@ -1186,7 +1186,8 @@ function TabEditor:gfxTimeLineSection()
             if sparams.positioning.mode == 'custom' then
                 offset = reaper.parse_timestr_pos(sparams.positioning.position, -1)
             else
-                local start_time, _ = TIMELINE.GetBounds(mec.me)
+                local start_time = nil
+                if mec.me then start_time = TIMELINE.GetBounds(mec.me) end
                 offset = start_time or 0
             end
 
