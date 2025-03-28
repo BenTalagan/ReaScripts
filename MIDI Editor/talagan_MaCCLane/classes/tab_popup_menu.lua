@@ -22,15 +22,13 @@ local TabPopupMenu = {}
 TabPopupMenu.clear = function()
     TabPopupMenu.current_tab    = nil
     TabPopupMenu.last_open_tab  = nil
-    TabPopupMenu.mec            = nil
 end
 
-TabPopupMenu.openOnTab = function(mec, tab)
+TabPopupMenu.openOnTab = function(tab)
     if TabPopupMenu.recently_closed_tab == tab or TabPopupMenu.current_tab == tab then
         -- Avoid reopening menu that was recently closed or that is currently open
         TabPopupMenu.clear()
     else
-        TabPopupMenu.mec            = mec
         TabPopupMenu.current_tab    = tab
     end
 end
@@ -43,7 +41,7 @@ end
 
 TabPopupMenu.hiearchySubMenu = function(ctx, node)
     local tab = TabPopupMenu.current_tab
-    local mec = TabPopupMenu.mec
+    local mec = tab.mec
 
     for _, sub in pairs(node.subs) do
         if sub.fweight > 0 then
@@ -78,11 +76,12 @@ TabPopupMenu.process = function()
 
     local ctx = MACCLContext.ImGuiContext
     local tab = TabPopupMenu.current_tab
-    local mec = TabPopupMenu.mec
 
     -- If no context, cannot show menu
     if not ctx then return end
     if not tab then return end
+
+    local mec = tab.mec
     if not mec then return end
 
     if not mec:isStillValid() then
@@ -217,6 +216,9 @@ TabPopupMenu.process = function()
             if ImGui.MenuItem(ctx, "Cut") then
                 TabPopupMenu.copiedTab = tab
                 tab:destroy()
+            end
+            if ImGui.MenuItem(ctx, "Duplicate") then
+                tab:duplicate()
             end
 
             if S.getSetting("DebugTools") then

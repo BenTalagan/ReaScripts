@@ -170,10 +170,10 @@ local function macclane()
         MEContext.getCreateOrUpdate(mec.me)
         MACCLContext.redrawn_widgets = MACCLContext.redrawn_widgets + 1
       end
-     end
+    end
 
-     MACCLContext.force_redraw    = false
-     MACCLContext.last_processing = MACCLContext.frame_time
+    MACCLContext.force_redraw    = false
+    MACCLContext.last_processing = MACCLContext.frame_time
   else
     -- Monitor frame skip
     UTILS.perf_accum().skipped = UTILS.perf_accum().skipped + 1
@@ -192,35 +192,35 @@ local function _macclane()
   --    - usage_perc      : 0.45 % (same value *1000 (ms->s) /100 (perc) )
   --    - frames skipped  : 31/34
   --    - forced redraws  : 1-2 (redraw at low pace or when needed only)
---
----@diagnostic disable-next-line: lowercase-global
+  --
+  ---@diagnostic disable-next-line: lowercase-global
   aaa_perf = UTILS.perf_ms(
-    function()
-      macclane()
-    end
-  )
-  reaper.defer(_macclane)
+  function()
+    macclane()
+  end
+)
+reaper.defer(_macclane)
 end
 
 local function run(args)
 
-    -- Define cleanup callbacks
-    reaper.atexit(function()
-        MACCLContext.destroyFont()
-        for addr, mec in pairs(MEContext.all()) do
-            mec:implode()
-        end
-    end)
+  -- Define cleanup callbacks
+  reaper.atexit(function()
+    MACCLContext.destroyFont()
+    for addr, mec in pairs(MEContext.all()) do
+      mec:implode()
+    end
+  end)
 
-    -- Pre-clean possible leaked bitmaps, probably obsolete now
-    LastChanceCleanupMaccLaneBitmaps()
+  -- Pre-clean possible leaked bitmaps, probably obsolete now
+  LastChanceCleanupMaccLaneBitmaps()
 
-    -- Pre-clean possible queued action
-    ACTIONS.ClearQueuedAction()
+  -- Pre-clean possible queued action
+  ACTIONS.ClearQueuedAction()
 
-    reaper.defer(_macclane)
+  reaper.defer(_macclane)
 end
 
 return {
-    run = run
+  run = run
 }
