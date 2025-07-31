@@ -252,7 +252,7 @@ local function drawBottomSettings(ctx)
     ImGui.EndGroup(ctx)
 end
 
-local BOTTOM_PARAM_HEIGHT = 50
+local BOTTOM_PARAM_HEIGHT = 54
 
 local function loop()
     -- Ensure main widget exists

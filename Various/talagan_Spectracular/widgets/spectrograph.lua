@@ -3,15 +3,16 @@
 -- @license MIT
 -- @description This file is part of Spectracular
 
-local ImGui = require "ext/imgui"
-local DSP   = require "modules/dsp"
-local MIDI  = require "modules/midi"
-local T     = require "widgets/theme"
-local UTILS = require "modules/utils"
-local LRMix = require "widgets/lr_mix"
+local ImGui                     = require "ext/imgui"
+local DSP                       = require "modules/dsp"
+local MIDI                      = require "modules/midi"
+local T                         = require "widgets/theme"
+local UTILS                     = require "modules/utils"
+local LRMix                     = require "widgets/lr_mix"
+local SpectrographImageStrip    = require "widgets/spectrograph_image_strip"
 
-local SpectrographTimeProfile = require "widgets/profiles/spectrograph_time_profile"
-local FrequencySliceProfile   = require "widgets/profiles/frequency_slice_profile"
+local SpectrographTimeProfile   = require "widgets/profiles/spectrograph_time_profile"
+local FrequencySliceProfile     = require "widgets/profiles/frequency_slice_profile"
 
 -------------------------
 
@@ -29,8 +30,8 @@ end
 
 function SpectrographWidget:_initialize(mw)
     self.mw             = mw
-    self.lice_bitmap    = nil
     self.imgui_bitmap   = nil
+    self.image_strip    = nil
 
     self:setCanvas(0,0,0,0)
     self:setDbBounds(-90, 6)
@@ -123,7 +124,7 @@ end
 
 function SpectrographWidget:createOrResizeImGuiBitmap(ctx, w, h)
     if self.imgui_bitmap then
-        local iw, ih = ImGui.ImageGetSize(self.imgui_bitmap)
+        local iw, ih = ImGui.Image_GetSize(self.imgui_bitmap)
         if w ~= iw or h ~= ih then
             ImGui.Detach(ctx, self.imgui_bitmap)
             self.imgui_bitmap = nil
@@ -135,40 +136,19 @@ function SpectrographWidget:createOrResizeImGuiBitmap(ctx, w, h)
     end
 end
 
-function SpectrographWidget:createOrResizeLiceBitmap(w, h)
-    if self.lice_bitmap then
-        reaper.JS_LICE_Resize(self.lice_bitmap, w, h)
-    else
-        self.lice_bitmap  = reaper.JS_LICE_CreateBitmap(false, w, h)
+function SpectrographWidget:createOrUpdateImageStrip(ctx)
+    if not self.image_strip then
+        self.image_strip = SpectrographImageStrip:new(ctx)
     end
+
+    self.image_strip:update(ctx, self.sc, self.lr_balance, self.dbmin, self.dbmax)
 end
 
-function SpectrographWidget:recreateImguiBitmapFromLice(ctx)
-    if self.imgui_bitmap then
-        ImGui.Detach(ctx, self.imgui_bitmap)
-    end
-
-    self.imgui_bitmap = nil
-
-    if self.lice_bitmap then
-        self.imgui_bitmap = ImGui.CreateImageFromLICE(self.lice_bitmap)
-        ImGui.Attach(ctx, self.imgui_bitmap)
-    end
-end
-
-function SpectrographWidget:recalculateBitmap(ctx)
-
-    local use_put_pixel = false
+function SpectrographWidget:recalculateTextures(ctx)
 
     local sac = self:spectrumContext()
 
-    if use_put_pixel then
-        -- We need a lice bitmap AND an imgui bitmap
-        self:createOrResizeLiceBitmap(sac.slice_count, sac.slice_size)
-    else
-        -- We just need an imgui bitmap
-        self:createOrResizeImGuiBitmap(ctx, sac.slice_count, sac.slice_size)
-    end
+    self:createOrUpdateImageStrip(ctx)
 
     -- Chan coeffs for the mix
     local coeffs = reaper.new_array(sac.chan_count)
@@ -178,40 +158,30 @@ function SpectrographWidget:recalculateBitmap(ctx)
     else
         coeffs[1] = 1
     end
+    -- We just need an imgui bitmap
+    self:createOrResizeImGuiBitmap(ctx, sac.slice_count, sac.slice_size)
 
     local spectrograms = sac.spectrograms
     local ref_spectro  = spectrograms[1]
+    local IMGUI_FORMAT = 1
+
     for i=1, ref_spectro.chunk_count do
         local ref_chunk = ref_spectro.chunks[i]
 
         self.rgb_buf = DSP.ensure_array_size(self.rgb_buf, ref_chunk.data_size)
 
+        -- Build multi-channel chunk
         local spectro_chunk_datas = {}
         for ci = 1, sac.chan_count do
             spectro_chunk_datas[ci] = spectrograms[ci].chunks[i].data
         end
 
-        DSP.analysis_data_to_rgb_array(spectro_chunk_datas, coeffs, self.rgb_buf, self.dbmin, self.dbmax, sac.slice_size, use_put_pixel and 0 or 1)
+        DSP.analysis_data_to_rgb_array(spectro_chunk_datas, coeffs, self.rgb_buf, self.dbmin, self.dbmax, sac.slice_size, IMGUI_FORMAT)
 
         local t1 = reaper.time_precise()
-        if use_put_pixel then
-            local pixi = 0
-            for si=0, ref_chunk.slice_count - 1 do -- span x
-                for j=0, sac.slice_size -1 do -- span y
-                    local p = self.rgb_buf[pixi+1]
-                    reaper.JS_LICE_PutPixel(self.lice_bitmap, ref_chunk.first_slice_offset + si, sac.slice_size - 1 - j, math.floor(p), 1, "COPY")
-                    pixi = pixi + 1
-                end
-            end
-        else
-            ImGui.Image_SetPixels_Array(self.imgui_bitmap, ref_chunk.first_slice_offset, 0, ref_chunk.slice_count, sac.slice_size, self.rgb_buf )
-        end
+        ImGui.Image_SetPixels_Array(self.imgui_bitmap, ref_chunk.first_slice_offset, 0, ref_chunk.slice_count, sac.slice_size, self.rgb_buf )
         local t2 = reaper.time_precise()
         -- reaper.ShowConsoleMsg("" .. (t2 - t1) .. " s\n")
-    end
-
-    if use_put_pixel then
-        self:recreateImguiBitmapFromLice(ctx)
     end
 
     self.need_refresh_rgb = false
@@ -507,7 +477,7 @@ function SpectrographWidget:draw(ctx)
     if not sac then return end
 
     if not self.imgui_bitmap or self.need_refresh_rgb then
-        self:recalculateBitmap(ctx)
+        self:recalculateTextures(ctx)
     end
 
     local draw_list     = ImGui.GetWindowDrawList(ctx)
