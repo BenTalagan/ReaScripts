@@ -133,8 +133,8 @@ function SpectrographImageStrip:fillImages(lr_balance, dbmin, dbmax)
 
     -- The aim is to fill all images with chunks
     -- Loop on all chunks of the spectro
-    for i=1, ref_spectro.chunk_count do
-        local ref_chunk = ref_spectro.chunks[i]
+    for chunki=1, ref_spectro.chunk_count do
+        local ref_chunk = ref_spectro.chunks[chunki]
 
         -- Create or reuse temporary RGB buffer
         self.rgb_buf = DSP.ensure_array_size(self.rgb_buf, ref_chunk.data_size)
@@ -142,8 +142,8 @@ function SpectrographImageStrip:fillImages(lr_balance, dbmin, dbmax)
         -- Build multi-channel chunk
         -- We're going to mix all channels using our coeffs
         local spectro_chunk_datas = {}
-        for ci = 1, sac.chan_count do
-            spectro_chunk_datas[ci] = spectrograms[ci].chunks[i].data
+        for chani = 1, sac.chan_count do
+            spectro_chunk_datas[chani] = spectrograms[chani].chunks[chunki].data
         end
 
         -- Convert chunk data to RGB
@@ -157,12 +157,11 @@ function SpectrographImageStrip:fillImages(lr_balance, dbmin, dbmax)
         local t2 = reaper.time_precise()
 
         if accumulate_in_iterator(ref_chunk.slice_count) then
-            iterate_image()
+            iterator = iterate_image()
         end
     end
 
-    self:exportToTga()
-
+    --self:exportToTga()
 end
 
 function SpectrographImageStrip:detach(ctx)
@@ -173,9 +172,14 @@ function SpectrographImageStrip:detach(ctx)
 end
 
 function SpectrographImageStrip:exportToTga()
+    local CHUNK_SIZE = 1024 * 1024 -- 1 MB memory footprint
+
+    local t1 = reaper.time_precise()
     for _, img in ipairs(self.images) do
-        local file_path = "/Users/ben/Downloads/toto-" .. _ .. ".tga"
-        local file = assert(io.open(file_path, "wb"))
+        local file_path     = "/Users/ben/Downloads/toto-" .. _ .. ".tga"
+        local file          = assert(io.open(file_path, "wb"))
+        local buffer        = reaper.new_array(img.w * img.h)
+        ImGui.Image_GetPixels_Array(img.image, 0, 0, img.w, img.h, buffer)
 
         -- En-tête TGA (18 octets)
         file:write(string.char(
@@ -193,22 +197,39 @@ function SpectrographImageStrip:exportToTga()
             40       -- Image descriptor (alpha bits), top left corner reversed
         ))
 
+        local chunk = {}
+        local chunk_size = 0
 
-        local buffer = reaper.new_array(img.w * img.h)
-        ImGui.Image_GetPixels_Array(img.image, 0, 0, img.w, img.h, buffer)
+        local flush_chunk = function()
+            if chunk_size > 0 then
+                file:write(table.concat(chunk))
+                chunk = {}
+                chunk_size = 0
+            end
+        end
 
-        -- Pixels en ordre BGRA (le buffer est supposé être en RRGGBBAA)
         for i = 1, #buffer do
             local color = buffer[i]
             local r = (color >> 24) & 0xFF
             local g = (color >> 16) & 0xFF
             local b = (color >> 8)  & 0xFF
             local a = color & 0xFF
-            file:write(string.char(b, g, r, a))
+
+            local pixel_data = string.char(b, g, r, a)
+            chunk[#chunk + 1] = pixel_data
+            chunk_size = chunk_size + 4
+
+            if chunk_size >= CHUNK_SIZE then
+                flush_chunk()
+            end
         end
 
+        flush_chunk()
         file:close()
     end
+    local t2 = reaper.time_precise()
+
+    reaper.ShowConsoleMsg("Dump :" .. (t2 - t1) .. "\n")
 end
 
 return SpectrographImageStrip
