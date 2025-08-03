@@ -189,7 +189,9 @@ local function sig_window(window_type, samples_array, window_start, window_size)
     ImGui.Function_SetValue(func, "_WINDOW_SIZE",      window_size)
     ImGui.Function_SetValue(func, "_SIZE",             #samples_array)
 
-    Function_SetValue_ArrayAt(func, "_SAMPLES",        samples_array, 0)
+    -- Hann coeffs are mapped first, then the samples,
+    -- so put all samples after the coeffs.
+    Function_SetValue_ArrayAt(func, "_SAMPLES",        samples_array, window_size)
 
     ImGui.Function_Execute(func)
     ImGui.Function_GetValue_Array(func, "_SAMPLES",    samples_array)

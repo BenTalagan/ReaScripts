@@ -54,7 +54,6 @@ end
 function SpectrumAnalysisContext:_buildAndRender()
     local params = self.params
 
-
     -- First, perform the right rendering
     local source_ctx = RENDER.render({
         channel_mode        = S.instance_params.channel_mode,

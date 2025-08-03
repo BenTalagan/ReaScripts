@@ -21,16 +21,19 @@ function malloc(size)
 );
 
 // Memory map
-_SAMPLES       = malloc(_SIZE);        // Passed by the lua script.
 _HANN_COEFFS   = malloc(_WINDOW_SIZE); // Precalculated hann coeffs, reusable from one round to the other for better performance
+_SAMPLES       = malloc(_SIZE);        // Passed by the lua script.
 
 function recalculate_hann_coeffs_if_needed()
     local(i, s, mult)
 (
+    // For debugging
+    RECALCULATED_COEFFS = 0;
+
     // Since we reuse the same function over and over again
     // Try to avoid recalculating costy coefficients along the spectrgograph
     // 99% of the time they will not change (except on the borders of the spectro)
-    (LAST_HANN_COEFF_ADDRESS != _HANN_COEFFS || LAST_HANN_SIZE != _WINDOW_SIZE)?(
+    (LAST_HANN_SIZE != _WINDOW_SIZE)?(
 
         i       = 0;
         mult    = $pi/(_WINDOW_SIZE - 1);
@@ -41,13 +44,13 @@ function recalculate_hann_coeffs_if_needed()
             i = i+1;
         );
 
-        LAST_HANN_COEFF_ADDRESS = _HANN_COEFFS;
-        LAST_HANN_SIZE          = _WINDOW_SIZE;
+        LAST_HANN_SIZE      = _WINDOW_SIZE;
+        RECALCULATED_COEFFS = 1;
     );
 );
 
 function hann_window(samples, window_start)
-    local(i, alpha)
+    local(i, alpha, idx)
 (
     recalculate_hann_coeffs_if_needed();
 
@@ -56,16 +59,17 @@ function hann_window(samples, window_start)
 
     i = 0;
     while(i < _WINDOW_SIZE) (
-        alpha   = _HANN_COEFFS[i]; // sin²
+        alpha        = _HANN_COEFFS[i]; // sin²
 
-        samples[window_start + i]   = alpha * samples[window_start + i];
+        idx          = window_start + i;
+        samples[idx] = alpha * samples[idx];
 
         // Since we apply windowing, the max energy of a signal on this window
         // is affected. Perform a calculation to know how it is affected (should be squared to get the magnitude)
         // Use samples with amplitude 1 as reference.
 
-        max_egy                     = max_egy + _HANN_COEFFS[i];
-        sig_egy                     = sig_egy + (samples[window_start + i] * samples[window_start + i]);
+        max_egy     = max_egy + _HANN_COEFFS[i];
+        sig_egy     = sig_egy + (samples[idx] * samples[idx]);
 
         i = i + 1;
     );
