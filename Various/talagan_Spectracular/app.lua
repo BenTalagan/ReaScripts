@@ -3,7 +3,7 @@
 -- @license MIT
 -- @description This file is part of Spectracular
 
-local Version                   = '0.2.4'
+local Version                   = '0.3.0'
 
 local S                         = require "modules/settings"
 local DSP                       = require "modules/dsp"

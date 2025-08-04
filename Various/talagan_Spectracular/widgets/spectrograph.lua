@@ -411,6 +411,7 @@ function SpectrographWidget:drawHorizontalNoteTicks(ctx, draw_list)
         end
     end
 
+    -- Debug feature : show grid for each PIXEL to check if the display is correct.
     local SHOW_PIX_GRID = false
     if SHOW_PIX_GRID then
         -- Show pix grid
