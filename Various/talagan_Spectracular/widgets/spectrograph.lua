@@ -446,13 +446,6 @@ function SpectrographWidget:draw(ctx)
     -- Set clipping on
     self:startClipping(draw_list)
 
-    -- Draw main texture
-    -- ImGui.DrawList_AddImage(draw_list, self.imgui_bitmap,
-    --     self.x + l,  self.y,                -- Top left
-    --     self.x + r,  self.y + self.h,       -- Bottom right
-    --     self.vp_u_l, self.vp_v_b,           -- Top left (U,V) (in image_strip)
-    --     self.vp_u_r, self.vp_v_t)           -- Bottom right (U,V) in image strip)
-
     -- Draw our images from our image strip
     for ii, img in ipairs(self.image_strip.images) do
 
@@ -473,13 +466,6 @@ function SpectrographWidget:draw(ctx)
                     local_ur, self.vp_v_t)           -- Bottom right (U,V) in image strip)
         end
     end
-
-    --ImGui.DrawList_AddRectFilled(draw_list, self.x,   self.y, self.x + l, self.y + self.h, T.SPECTROGRAPH_BORDER_BG)
-    --ImGui.DrawList_AddRectFilled(draw_list, self.x+r, self.y, self.x + self.w, self.y + self.h, T.SPECTROGRAPH_BORDER_BG)
-
-    -- Draw borders left and right, to show where the fft
-    --ImGui.DrawList_AddLine(draw_list,        self.x + l, self.y,        self.x + l, self.y + self.h,        T.SPECTROGRAPH_BORDER)
-    --ImGui.DrawList_AddLine(draw_list,        self.x + r, self.y,        self.x + r, self.y + self.h,        T.SPECTROGRAPH_BORDER)
 
     local mx, my    = ImGui.GetMousePos(ctx)
     local time      = self:xToTime(mx)
