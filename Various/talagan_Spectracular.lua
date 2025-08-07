@@ -14,6 +14,7 @@
   - [Optimization] Using new ImGui Image API for texture generation
   - [Rework] If measures / beats are too narrow, skip some vertical ticks during drawing
   - [Cosmetics] Synthwavest logo ever
+  - [Cosmetics] Adapted to ImGui 0.10.0
 @provides
   [nomain] talagan_Spectracular/ext/**/*
   [nomain] talagan_Spectracular/classes/**/*

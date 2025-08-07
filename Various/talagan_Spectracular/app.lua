@@ -18,6 +18,7 @@ local HelpWindow                = require "widgets/help_window"
 
 local ImGui                     = require "ext/imgui"
 local ctx                       = ImGui.CreateContext(S.AppName)
+local Arial                     = ImGui.CreateFont("Arial", ImGui.FontFlags_None)
 
 -- The DSP module needs ImGui compiled EEL function features
 DSP.setImGuiContext(ctx)
@@ -293,6 +294,7 @@ local function loop()
         end
     end
 
+    ImGui.PushFont(ctx, Arial, 12)
     ImGui.SetNextWindowSizeConstraints(ctx, 900, 600, math.huge, math.huge)
     local visible, open = ImGui.Begin(ctx, S.AppName .. ' v' .. Version .. " (" .. S.instance_params.channel_mode .. ")##Spectracular_main", true)
     if visible then
@@ -394,6 +396,7 @@ local function loop()
     if open then
         reaper.defer(loop)
     end
+    ImGui.PopFont(ctx)
 end
 
 local function run(args)

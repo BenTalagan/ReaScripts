@@ -134,6 +134,14 @@ local function render(params)
 
     -- Backup current tracks
     local selectedTracks            = TRACKS.GetSelectedTracks(0)
+
+    if #selectedTracks == 0 then
+        return {
+            success = false,
+            err     = "Please select one or more tracks !"
+        }
+    end
+
     -- Backup this flag
     local scroll_follows_playback   = ScrollFollowsPlaybackState()
 
