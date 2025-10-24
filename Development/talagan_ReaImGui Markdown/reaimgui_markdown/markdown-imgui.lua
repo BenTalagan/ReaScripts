@@ -450,6 +450,11 @@ local function ASTToImgui(ctx, ast, fonts, style, options)
 
     -- Define render_node
     local last_node = nil
+    local max_x     = nil
+    local max_y     = nil
+    local win_x, win_y     = ImGui.GetWindowPos(ctx)
+    local start_x, start_y = win_x, win_y
+
     local function render_node(node, level)
         level = level or 1 -- Default to level 1 if not provided
         if node.type == "Document" then
@@ -739,6 +744,12 @@ local function ASTToImgui(ctx, ast, fonts, style, options)
             end
         end
 
+        local imax_x, imax_y = ImGui.GetItemRectMax(ctx)
+        imax_x = imax_x - start_x
+        imax_y = imax_y - start_y
+        if not max_x or imax_x > max_x then max_x = imax_x end
+        if not max_y or imax_y > max_y then max_y = imax_y end
+
         if last_node == node then
             rendered_last = true
         end
@@ -752,6 +763,8 @@ local function ASTToImgui(ctx, ast, fonts, style, options)
     end
 
     render_node(ast, 1)
+
+    return max_x, max_y
 end
 
 return {
