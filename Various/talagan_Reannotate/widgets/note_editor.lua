@@ -32,8 +32,8 @@ function NoteEditor:setSize(w,h)
   self.w, self.h = w, h
 end
 
-function NoteEditor:setEditContext(edit_context)
-  self.edit_context = edit_context
+function NoteEditor:setEditedThing(thing)
+  self.edited_thing = thing
 end
 
 function NoteEditor:setEditedSlot(slot)
@@ -47,20 +47,20 @@ end
 function NoteEditor:title()
   local t = "Editing annotations for "
 
-  if self.edit_context.type == "track" then
+  if self.edited_thing.type == "track" then
     t = t .. "Track"
-  elseif self.edit_context.type == "env" then
+  elseif self.edited_thing.type == "env" then
     t = t .. "Envelope"
-  elseif self.edit_context.type == "item" then
+  elseif self.edited_thing.type == "item" then
     t = t .. "Item"
-  elseif self.edit_context.type == "project" then
+  elseif self.edited_thing.type == "project" then
     t = t .. "Project"
   else
     error("Unimplemented")
   end
 
   t = t .. " "
-  t = t .. self.edit_context.name
+  t = t .. self.edited_thing.name
 
   return t
 end
@@ -99,7 +99,7 @@ function NoteEditor:draw()
 
     ImGui.PushID(ctx, "note_editor_" .. self.rand)
 
-    local entry   = self.edit_context.notes:slot(self.edited_slot)
+    local entry   = self.edited_thing.notes:slot(self.edited_slot)
 
     if ImGui.IsWindowAppearing(ctx) or self.grab_focus then
       ImGui.SetKeyboardFocusHere(ctx)
@@ -135,7 +135,7 @@ function NoteEditor:draw()
       for i=0, Notes.MAX_SLOTS-1 do
         local slot    = (i==Notes.MAX_SLOTS - 1) and (0) or (i+1) -- Put SWS/Reaper at the end
 
-        if slot == 0 and self.edit_context.type == "env" then
+        if slot == 0 and self.edited_thing.type == "env" then
         else
           local col     = Color:new(Notes.SlotColor(slot))
           local h, s, v = col:hsv()
@@ -193,19 +193,16 @@ function NoteEditor:draw()
     end
 
     if b and is_open then
-      self.edit_context.notes:setSlot(self.edited_slot, entry)
-      self.edit_context.notes:commit()
+      self.edited_thing.notes:setSlot(self.edited_slot, entry)
+      self.edited_thing.notes:commit()
 
-      local alternate_entry = self.edit_context.mcp_entry or self.edit_context.tcp_entry
+      local alternate_entry = self.edited_thing.mcp_entry or self.edited_thing.tcp_entry
       if alternate_entry then
         alternate_entry.notes:pull()
       end
       self:onSlotCommit()
     end
 
-    if self.grab_focus then
-      self.grab_focus = false
-    end
 
     -- Remember positions
     self.w, self.h = ImGui.GetWindowSize(ctx)
@@ -214,6 +211,7 @@ function NoteEditor:draw()
     ImGui.PopID(ctx)
     ImGui.End(ctx)
 
+    self.grab_focus = false
     self.editor_draw_count = self.editor_draw_count + 1
   end
 

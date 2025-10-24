@@ -31,7 +31,6 @@ function SettingsEditor:draw()
     local app_ctx   = AppContext:instance()
     local ctx       = app_ctx.imgui_ctx
 
-
     local b, open = ImGui.Begin(ctx, "Reannotate Settings##reannotate_settings_editor", true,
         ImGui.WindowFlags_AlwaysAutoResize |
         ImGui.WindowFlags_NoDocking |
