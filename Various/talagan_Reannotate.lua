@@ -1,6 +1,6 @@
 --[[
 @description Reannotate - Annotation tool for REAPER
-@version 0.3.4
+@version 0.3.6
 @author Ben 'Talagan' Babut
 @donation https://www.paypal.com/donate/?business=3YEZMY9D6U8NC&no_recurring=1&currency_code=EUR
 @license MIT
@@ -10,8 +10,10 @@
   Forum Thread https://forum.cockos.com/showthread.php?t=304147
 @metapackage
 @changelog
-  - [Feature] Double-click tooltip for auto resize
-  - [Bug Fix] Items contained in hidden fixed lanes should not be shown in overlay (thanks @smandrap !)
+  - [Feature] Right click to pin
+  - [Rework] Multiple overlays and floating MCP support
+  - [Rework] No more use for top windows minimization
+  - [Rework] Better z-ordering logic
 @provides
   [nomain] talagan_Reannotate/ext/**/*
   [nomain] talagan_Reannotate/classes/**/*

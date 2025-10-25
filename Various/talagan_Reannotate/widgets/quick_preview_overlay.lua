@@ -428,24 +428,18 @@ function QuickPreviewOverlay:ensureZOrder()
     end
 end
 
-function QuickPreviewOverlay:garbageCollectNoteEditor()
-    -- Ensure note editor is deleted if not used anymore
-    if self.note_editor and not self.note_editor.show_editor then
-        self.note_editor = nil
-        AppContext:instance():flog("Garbage collected note editor")
-    end
-end
-
 function QuickPreviewOverlay:currentTooltipSizeForThing(thing)
     if self.note_editor then
         return thing.notes:tooltipSize(self.note_editor.edited_slot or 0)
     end
 
-    if thing.hovered_slot == -1 then
+    local slot = (thing == self.pinned_thing) and (thing.capture_slot) or (thing.hovered_slot)
+
+    if slot == -1 then
         return Notes.defaultTooltipSize()
     end
 
-    return thing.notes:tooltipSize(thing.hovered_slot or 0)
+    return thing.notes:tooltipSize(slot or 0)
 end
 
 
@@ -526,13 +520,15 @@ function QuickPreviewOverlay:tooltipAdvisedPositionForEditedThingAndSlot(thing, 
     return { x = x, y = y }
 end
 
-function QuickPreviewOverlay:drawTooltip(hovered_thing)
+function QuickPreviewOverlay:drawTooltip()
     local app_ctx   = AppContext.instance()
     local ctx       = app_ctx.imgui_ctx
     local mx, my    = ImGui.GetMousePos(ctx)
     local tt_pos    = {x = mx + 20, y = my + 20}
+    local hovered_thing = self.hovered_thing
+    local pinned_thing  = self.pinned_thing
 
-    local thing_to_tooltip = (self.note_editor and self.note_editor.edited_thing) or (hovered_thing)
+    local thing_to_tooltip = (self.note_editor and self.note_editor.edited_thing) or (pinned_thing) or (hovered_thing)
 
     if thing_to_tooltip then
         if not self.mdwidget then
@@ -540,7 +536,7 @@ function QuickPreviewOverlay:drawTooltip(hovered_thing)
             self.mdwidget  = ImGuiMd:new(ctx, "markdown_widget_1", { wrap = true, autopad = true, skip_last_whitespace = true }, QuickPreviewOverlay.markdownStyle )
         end
 
-        local slot_to_tooltip   = ((self.note_editor) and (self.note_editor.edited_slot)) or (thing_to_tooltip.hovered_slot)
+        local slot_to_tooltip   = ((self.note_editor) and (self.note_editor.edited_slot)) or (pinned_thing and pinned_thing.capture_slot) or (thing_to_tooltip.hovered_slot)
         local tttext            = (slot_to_tooltip == -1) and (thing_to_tooltip.no_notes_message) or (thing_to_tooltip.notes:slot(slot_to_tooltip))
         if tttext == "" or tttext == nil then
             tttext = "`:grey:No " .. thing_to_tooltip.type .. " notes for the `_:grey:" .. Notes.SlotLabel(slot_to_tooltip):lower() .. "_ `:grey:category`"
@@ -550,7 +546,7 @@ function QuickPreviewOverlay:drawTooltip(hovered_thing)
 
         ImGui.SetNextWindowBgAlpha(ctx, 1)
 
-        if self.note_editor then
+        if self.note_editor or pinned_thing then
             -- If there's a note editor, fix the position
             tt_pos = thing_to_tooltip.capture_xy
         else
@@ -645,6 +641,7 @@ function QuickPreviewOverlay:draw()
     -- Reset frame status variables
     self.hovered_thing_this_frame   = nil
     self.captured_click             = false
+    self.captured_right_click       = false
 
     for _, canvas in ipairs(self.canvases) do
         -- This may capture hover and click
@@ -655,10 +652,19 @@ function QuickPreviewOverlay:draw()
         self.hovered_thing = nil
     end
 
-    self:drawTooltip(self.hovered_thing)
+    if self.pinned_thing then
+        if self.note_editor then
+            self.pinned_thing = nil
+        else
+            local ppos   = self.pinned_thing.capture_xy
+            local pw, ph = self:currentTooltipSizeForThing(self.pinned_thing)
+            if (mx < ppos.x - 30) or (mx > ppos.x + pw) or (my < ppos.y - 30) or (my > ppos.y + ph) then
+                self.pinned_thing = nil
+            end
+        end
+    end
 
-    self.last_hovered_thing = self.hovered_thing
-    self.last_hovered_slot  = self.hovered_thing and self.hovered_thing.hovered_slot
+    self:drawTooltip()
 
     if self.hovered_thing and self.captured_click then
         -- Save the click point for fixing the position
@@ -688,6 +694,14 @@ function QuickPreviewOverlay:draw()
         end
     end
 
+    if self.hovered_thing and self.captured_right_click then
+        self.note_editor                 = nil
+        self.hovered_thing.capture_xy    = self:tooltipAdvisedPositionForThing(self.hovered_thing, mx, my)
+        self.hovered_thing.capture_slot  = self.hovered_thing.hovered_slot
+        self.pinned_thing                = self.hovered_thing
+        self.tt_draw_count = 0
+    end
+
     if self.hovered_thing and not self.note_editor then
         -- Reset tooltip draw count so that the tooltip is not fixed
         self.tt_draw_count = 0
@@ -698,8 +712,10 @@ function QuickPreviewOverlay:draw()
         self.note_editor = nil
     end
 
-    if self.note_editor and self.note_editor.show_editor then
+    if self.note_editor and self.note_editor.open then
         self.note_editor:draw()
+    else
+        self.note_editor = nil
     end
 
     if self.settings_window and self.settings_window.open then
@@ -708,7 +724,6 @@ function QuickPreviewOverlay:draw()
         self.settings_window = nil
     end
 
-    self:garbageCollectNoteEditor()
     self:ensureZOrder()
 
     if self.draw_count > 0 then

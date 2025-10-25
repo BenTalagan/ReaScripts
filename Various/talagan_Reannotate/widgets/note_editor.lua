@@ -15,13 +15,13 @@ function NoteEditor:new()
   local instance = {}
   setmetatable(instance, self)
   instance:_initialize()
-  self.editor_draw_count = 0
-  self.show_editor = true
-  self.rand = math.random()
   return instance
 end
 
 function NoteEditor:_initialize()
+  self.editor_draw_count  = 0
+  self.rand               = math.random()
+  self.open               = true
 end
 
 function NoteEditor:setPosition(x,y)
@@ -215,11 +215,7 @@ function NoteEditor:draw()
     self.editor_draw_count = self.editor_draw_count + 1
   end
 
-  if not is_open then
-    self.show_editor = false
-  end
-
-  return self.show_editor
+  self.open = is_open
 end
 
 return NoteEditor

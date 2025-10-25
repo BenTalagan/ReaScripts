@@ -520,8 +520,13 @@ function OverlayCanvas:draw()
             end
         end
 
-        if ImGui.IsWindowHovered(ctx, ImGui.HoveredFlags_RootWindow) and ImGui.IsMouseClicked(ctx,0,false) then
-            parent_overlay.captured_click = true
+        if ImGui.IsWindowHovered(ctx, ImGui.HoveredFlags_RootWindow) then
+            if ImGui.IsMouseClicked(ctx, ImGui.MouseButton_Left,false) then
+                parent_overlay.captured_click = true
+            end
+            if ImGui.IsMouseClicked(ctx, ImGui.MouseButton_Right,false) then
+                parent_overlay.captured_right_click = true
+            end
         end
 
         ImGui.PopStyleColor(ctx)

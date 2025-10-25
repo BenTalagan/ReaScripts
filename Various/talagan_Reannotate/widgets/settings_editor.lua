@@ -15,11 +15,11 @@ function SettingsEditor:new()
   local instance = {}
   setmetatable(instance, self)
   instance:_initialize()
-  self.draw_count = 0
   return instance
 end
 
 function SettingsEditor:_initialize()
+    self.draw_count = 0
     self.open = true
 end
 
