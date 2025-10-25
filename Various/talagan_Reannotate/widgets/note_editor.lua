@@ -19,9 +19,9 @@ function NoteEditor:new()
 end
 
 function NoteEditor:_initialize()
-  self.editor_draw_count  = 0
-  self.rand               = math.random()
-  self.open               = true
+  self.draw_count  = 0
+  self.rand        = math.random()
+  self.open        = true
 end
 
 function NoteEditor:setPosition(x,y)
@@ -118,10 +118,10 @@ function NoteEditor:draw()
     end
 
     if ImGui.IsWindowAppearing(ctx) then
-      self.editor_draw_count = 0
+      self.draw_count = 0
     end
 
-    if self.editor_draw_count == 1 then
+    if self.draw_count == 1 then
       ImGui.Function_SetValue(app_ctx.cursor_func, "WANTED_CURSOR", string.len(entry))
     end
 
@@ -162,7 +162,7 @@ function NoteEditor:draw()
               if slot ~= self.edited_slot then
                 self.edited_slot = slot
                 self.grab_focus = true
-                self.editor_draw_count = 0
+                self.draw_count = 0
                 self:onSlotEditChange()
               end
             end
@@ -212,7 +212,7 @@ function NoteEditor:draw()
     ImGui.End(ctx)
 
     self.grab_focus = false
-    self.editor_draw_count = self.editor_draw_count + 1
+    self.draw_count = self.draw_count + 1
   end
 
   self.open = is_open

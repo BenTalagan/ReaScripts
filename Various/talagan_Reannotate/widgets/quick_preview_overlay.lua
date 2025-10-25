@@ -377,6 +377,23 @@ function QuickPreviewOverlay:restoreMinimizedWindowsAtExit()
     end
 end
 
+function QuickPreviewOverlay:ZOrderSwap()
+    local app_ctx = AppContext.instance()
+    if self.canvases then
+        for _, canvas in ipairs(self.canvases) do
+            local parent_hwnd = canvas:parentWindowInfo().hwnd
+
+            -- Using the swap those guys technique
+            reaper.JS_Window_SetZOrder(canvas.hwnd, "INSERTAFTER", parent_hwnd)
+            reaper.JS_Window_SetZOrder(parent_hwnd, "INSERTAFTER", canvas.hwnd)
+
+            if is_windows then
+                reaper.JS_Window_SetForeground(canvas.hwnd)
+            end
+        end
+    end
+end
+
 function QuickPreviewOverlay:ensureZOrder()
     local app_ctx = AppContext.instance()
     local ctx = app_ctx.imgui_ctx
@@ -395,18 +412,7 @@ function QuickPreviewOverlay:ensureZOrder()
         -- Set main window as foreground.
         reaper.JS_Window_SetForeground(app_ctx.mv.hwnd)
 
-        if self.canvases then
-            for _, canvas in ipairs(self.canvases) do
-                if canvas:isMain() then
-                    -- Using the swap those guys technique
-                    reaper.JS_Window_SetZOrder(canvas.hwnd, "INSERTAFTER", app_ctx.mv.hwnd)
-                    reaper.JS_Window_SetZOrder(app_ctx.mv.hwnd, "INSERTAFTER", canvas.hwnd)
-                else
-                    reaper.JS_Window_SetZOrder(canvas.hwnd, "INSERTAFTER", app_ctx.mcp_window.hwnd)
-                    reaper.JS_Window_SetZOrder(app_ctx.mcp_window.hwnd, "INSERTAFTER", canvas.hwnd)
-                end
-            end
-        end
+        self:ZOrderSwap()
 
         if self.note_editor then
             app_ctx:flog("Foregrounding note editor ...")
@@ -414,15 +420,22 @@ function QuickPreviewOverlay:ensureZOrder()
             self.note_editor:GrabFocus()
         end
     else
-        if self:IsInReaper() and (not self.note_editor) and (not self.settings_window) and (self.canvases) then
-            local fhwnd = reaper.JS_Window_GetFocus()
+        if self:IsInReaper() then
+            if is_windows and self.note_editor and self.note_editor.draw_count == 0 then
+                -- This is necessary under windows. The editor focus scrambles the
+                -- Floating mixer's z order.
+                self:ZOrderSwap()
+            end
+            if (not self.note_editor) and (not self.settings_window) and (self.canvases) then
+                local fhwnd = reaper.JS_Window_GetFocus()
 
-            -- If we don't have a note editor, then the overlay should always have focus in the imgui context
-            -- local one_canvas_has_focus = (reaper.JS_Window_GetClassName(fhwnd) == "reaper_imgui_context")
+                -- If we don't have a note editor, then the overlay should always have focus in the imgui context
+                -- local one_canvas_has_focus = (reaper.JS_Window_GetClassName(fhwnd) == "reaper_imgui_context")
 
-            if fhwnd == reaper.GetMainHwnd() then
-                reaper.JS_Window_SetForeground(self.canvases[1].hwnd)
-                self.canvases[1]:GrabFocus()
+                if fhwnd == reaper.GetMainHwnd() then
+                    reaper.JS_Window_SetForeground(self.canvases[1].hwnd)
+                    self.canvases[1]:GrabFocus()
+                end
             end
         end
     end
