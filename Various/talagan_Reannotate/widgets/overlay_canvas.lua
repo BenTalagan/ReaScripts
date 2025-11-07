@@ -115,6 +115,8 @@ function OverlayCanvas:drawQuickSettings()
 
     local sinalpha          = (0xFF - 0x40 + math.floor(0x40 * math.sin(reaper.time_precise()*10)))
 
+    ImGui.PushFont(ctx, app_ctx.arial_font, 12)
+
     ImGui.DrawList_AddRectFilled(draw_list, app_ctx.main_toolbar.x, app_ctx.main_toolbar.y, app_ctx.main_toolbar.x + app_ctx.main_toolbar.w, app_ctx.main_toolbar.y + app_ctx.main_toolbar.h, 0x202020E0, 5)
     ImGui.DrawList_AddRect      (draw_list, app_ctx.main_toolbar.x, app_ctx.main_toolbar.y, app_ctx.main_toolbar.x + app_ctx.main_toolbar.w, app_ctx.main_toolbar.y + app_ctx.main_toolbar.h, 0xA0A0A0FF, 5)
 
@@ -123,7 +125,7 @@ function OverlayCanvas:drawQuickSettings()
         local color         = (Notes.SlotColor(slot) << 8) | 0xFF
         local l             = app_ctx.main_toolbar.x + (i * (2 * r + spacing)) + header_l + margin_l
         local t             = app_ctx.main_toolbar.y + margin_t
-        local hovered       = (l - mid_spacing <= mx) and (mx <= l + mid_spacing + d) and (t - mid_spacing <= my) and (my <= t + mid_spacing + d)
+        local hovered       = (l - mid_spacing <= mx) and (mx <= l + mid_spacing + d) and (t - mid_spacing <= my) and (my <= t + mid_spacing + d) and ImGui.IsWindowHovered(ctx)
 
         if app_ctx.enabled_category_filters[slot+1] then
             local fcol = color & 0xFFFFFF00 | 0x80
@@ -149,13 +151,11 @@ function OverlayCanvas:drawQuickSettings()
         end
     end
 
-    ImGui.PushFont(ctx, app_ctx.arial_font, 12)
     ImGui.DrawList_AddText(draw_list, app_ctx.main_toolbar.x + margin_l, app_ctx.main_toolbar.y + margin_t + 3, 0xA0A0A0FF, "Filter")
-    ImGui.PopFont(ctx)
 
     local px, py = ImGui.GetWindowPos(ctx)
-    ImGui.SetCursorPos(ctx, app_ctx.main_toolbar.x - px + 260, app_ctx.main_toolbar.y - py + margin_t )
-    ImGui.PushStyleVar(ctx, ImGui.StyleVar_FramePadding, 4, 2)
+    ImGui.SetCursorPos(ctx, app_ctx.main_toolbar.x - px + 260, app_ctx.main_toolbar.y - py + margin_t)
+    ImGui.PushStyleVar(ctx, ImGui.StyleVar_FramePadding, 4, 3)
     ImGui.PushStyleVar(ctx, ImGui.StyleVar_FrameRounding, 2)
     if ImGui.Button(ctx, "All") then
         for i=0, Notes.MAX_SLOTS - 1 do
@@ -174,31 +174,28 @@ function OverlayCanvas:drawQuickSettings()
     ImGui.PopStyleVar(ctx, 3)
 
     -- Search label
-    ImGui.PushFont(ctx, app_ctx.arial_font, 12)
     ImGui.DrawList_AddText(draw_list, app_ctx.main_toolbar.x + margin_l, app_ctx.main_toolbar.y + margin_t + 27, 0xA0A0A0FF, "Search")
-    ImGui.PopFont(ctx)
 
+    -- Search input
     ImGui.SetCursorPos(ctx, app_ctx.main_toolbar.x - wpos_x + margin_l + header_l, ImGui.GetCursorPosY(ctx) + 3)
-
-    ImGui.SetNextItemWidth(ctx, 218) --math.min(220, app_ctx.main_toolbar.w - margin_l * 2 - header_l))
-    local b, v      = ImGui.InputText(ctx, "##search_input", self.parent_overlay.filter_str, ImGui.InputTextFlags_NoHorizontalScroll | ImGui.InputTextFlags_AutoSelectAll | ImGui.InputTextFlags_ParseEmptyRefVal )
+    ImGui.SetNextItemWidth(ctx, 227) --math.min(220, app_ctx.main_toolbar.w - margin_l * 2 - header_l))
+    ImGui.PushStyleVar(ctx, ImGui.StyleVar_FramePadding, 4, 2)
+    local b, v = ImGui.InputTextWithHint(ctx, "##search_input", "Terms...", self.parent_overlay.filter_str,  ImGui.InputTextFlags_NoHorizontalScroll | ImGui.InputTextFlags_AutoSelectAll | ImGui.InputTextFlags_ParseEmptyRefVal )
     if b then
         self.parent_overlay.filter_str = v
         for ti, thing in ipairs(visible_things) do
             self.parent_overlay:applySearchToThing(thing)
         end
     end
-    if self.parent_overlay.filter_str == "" then
-        local sx, sy    = ImGui.GetItemRectMin(ctx)
-        ImGui.DrawList_AddText(draw_list, sx + 5, sy + 1, 0xA0A0A0FF, "Terms ...")
-    end
+    ImGui.PopStyleVar(ctx)
 
     ImGui.SameLine(ctx)
-    ImGui.SetCursorPosX(ctx, ImGui.GetCursorPosX(ctx) + 4)
+    ImGui.SetCursorPosX(ctx, ImGui.GetCursorPosX(ctx) + 2)
 
+    -- Settings button
     ImGui.PushStyleVar(ctx, ImGui.StyleVar_FramePadding, 1, 1)
     ImGui.PushStyleVar(ctx, ImGui.StyleVar_FrameRounding, 2)
-    if ImGui.ImageButton(ctx, "##settings_button", app_ctx:getImage("settings"), 17, 17) then
+    if ImGui.ImageButton(ctx, "##settings_button", app_ctx:getImage("settings"), 16, 16) then
         ImGui.SameLine(ctx)
         if app_ctx.settings_window then
             self.parent_overlay.settings_window = nil
@@ -213,7 +210,10 @@ function OverlayCanvas:drawQuickSettings()
     end
 
     ImGui.PopStyleVar(ctx, 2)
+    ImGui.PopFont(ctx)
 
+
+    -- LOGO LOGIC
     local align             = 320
     local remaining_space   = app_ctx.main_toolbar.w - align
 

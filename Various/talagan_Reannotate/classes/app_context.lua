@@ -84,13 +84,14 @@ function AppContext:_initialize()
   self.arial_font         = ImGui.CreateFont("Arial", ImGui.FontFlags_None)
   self.arial_font_italic  = ImGui.CreateFont("Arial", ImGui.FontFlags_Italic | ImGui.FontFlags_Bold)
 
+  ImGui.Attach(self.imgui_ctx, self.cursor_func)
+  ImGui.Attach(self.imgui_ctx, self.arial_font)
+  ImGui.Attach(self.imgui_ctx, self.arial_font_italic)
+
   self.enabled_category_filters = {}
   for i=1, Notes.MAX_SLOTS do
     self.enabled_category_filters[i] = true
   end
-
-  ImGui.Attach(self.imgui_ctx, self.cursor_func)
-  ImGui.Attach(self.imgui_ctx, self.arial_font)
 
   AppContext.__singleton = self
 end

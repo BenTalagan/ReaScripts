@@ -7,6 +7,9 @@ local ImGui         = require "ext/imgui"
 local AppContext    = require "classes/app_context"
 local Notes         = require "classes/notes"
 local Color         = require "classes/color"
+local EmojImGui     = require "emojimgui"
+local StickerPicker = require "widgets/sticker_picker"
+
 
 local NoteEditor = {}
 NoteEditor.__index = NoteEditor
@@ -180,6 +183,19 @@ function NoteEditor:draw()
 
     ImGui.PopStyleColor(ctx)
 
+    -- Sticker zone
+
+    ImGui.AlignTextToFramePadding(ctx)
+    ImGui.Text(ctx, "Stickers")
+    ImGui.SameLine(ctx)
+
+    ImGui.PushStyleVar(ctx, ImGui.StyleVar_FrameRounding, 10)
+    if ImGui.Button(ctx, "+") then
+      self.sticker_picker = StickerPicker:new()
+    end
+    ImGui.PopStyleVar(ctx)
+
+
     local ax, ay  = ImGui.GetContentRegionAvail(ctx)
     if self.grab_focus then
       ImGui.SetKeyboardFocusHere(ctx)
@@ -203,6 +219,16 @@ function NoteEditor:draw()
       self:onSlotCommit()
     end
 
+    if self.sticker_picker and self.sticker_picker.open then
+      local picked_sticker = self.sticker_picker:draw(ctx)
+      if picked_sticker then
+        self.sticker_picker.open = false
+      end
+    end
+
+    if self.sticker_picker and not self.sticker_picker.open then
+      self.sticker_picker = nil
+    end
 
     -- Remember positions
     self.w, self.h = ImGui.GetWindowSize(ctx)

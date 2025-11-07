@@ -763,6 +763,7 @@ function QuickPreviewOverlay:draw()
         self:restoreMinimizedWindowsAtExit()
         reaper.JS_Window_SetFocus(app_ctx.mv.hwnd)
         reaper.JS_Window_SetForeground(app_ctx.mv.hwnd)
+        reaper.ShowConsoleMsg("BOOM")
     end
 end
 
