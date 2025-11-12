@@ -7,6 +7,7 @@ local ImGui             = require "ext/imgui"
 local AppContext        = require "classes/app_context"
 local Notes             = require "classes/notes"
 local SettingsEditor    = require "widgets/settings_editor"
+local Sticker           = require "classes/sticker"
 
 local OverlayCanvas = {}
 OverlayCanvas.__index = OverlayCanvas
@@ -269,7 +270,7 @@ function OverlayCanvas:drawVisibleThing(thing)
     local has_notes_to_show     = false
     local no_notes_message      = ""
     for i=0, Notes.MAX_SLOTS do
-        local slot_notes        = thing.notes:slot(i)
+        local slot_notes        = thing.notes:slotText(i)
         local is_slot_enabled   = app_ctx.enabled_category_filters[i + 1]
         local the_slot_matches_the_search  = (thing.search_results[i + 1])
         if slot_notes and slot_notes ~= "" and is_slot_enabled and the_slot_matches_the_search then
@@ -305,7 +306,7 @@ function OverlayCanvas:drawVisibleThing(thing)
         local slot              = (i==Notes.MAX_SLOTS - 1) and (0) or (i+1)
         local is_slot_enabled   = (is_no_note_slot or app_ctx.enabled_category_filters[slot + 1])
 
-        local slot_notes        = (is_no_note_slot and no_notes_message or thing.notes:slot(slot))
+        local slot_notes        = (is_no_note_slot and no_notes_message or thing.notes:slotText(slot))
         local the_slot_matches_the_search  = (thing.search_results[slot+1])
 
         -- The empty slot is always visible
@@ -375,13 +376,17 @@ function OverlayCanvas:drawVisibleThing(thing)
                     ImGui.DrawList_AddRectFilled(draw_list, x2 - border_width, y1, x2, y2, border_color, 0, 0)
                 end
                 -- Top and bottom borders
-                ImGui.DrawList_AddRectFilled(draw_list, x1, y1, x2, y1 + border_width, border_color, 0, 0)
-                ImGui.DrawList_AddRectFilled(draw_list, x1, y2 - border_width, x2, y2, border_color, 0, 0)
-            else
-                if div == 0 then
+                if not thing.clamped_top then
                     ImGui.DrawList_AddRectFilled(draw_list, x1, y1, x2, y1 + border_width, border_color, 0, 0)
                 end
-                if div == divisions - 1 then
+                if not thing.clamped_bottom then
+                    ImGui.DrawList_AddRectFilled(draw_list, x1, y2 - border_width, x2, y2, border_color, 0, 0)
+                end
+            else
+                if div == 0 and not thing.clamped_top then
+                    ImGui.DrawList_AddRectFilled(draw_list, x1, y1, x2, y1 + border_width, border_color, 0, 0)
+                end
+                if div == divisions - 1 and not thing.clamped_bottom then
                     ImGui.DrawList_AddRectFilled(draw_list, x1, y2 - border_width, x2, y2, border_color, 0, 0)
                 end
                 ImGui.DrawList_AddRectFilled(draw_list, x1, y1, x1 + border_width, y2, border_color, 0, 0)
@@ -389,50 +394,46 @@ function OverlayCanvas:drawVisibleThing(thing)
             end
 
             if not is_no_note_slot then
-                -- Label part
-                ImGui.PushFont(ctx, app_ctx.arial_font, 10)
-                local label     = Notes.SlotLabel(slot)
-                local lw, lh    = ImGui.CalcTextSize(ctx, label)
-                local padding_h   = 4
-                local padding_v   = 3
-                local margin    = 5
-                local available_width   = x2 - x1 - 2 * margin - 2 * padding_h
+                -- RENDER STICKERS
+                local margin        = 5
+                local vpad          = 4
+                local hpad          = 3
 
-                if lh + 2 * padding_v + 2 * margin < y2 - y1 then
-                    local text_w = nil
-                    local text   = nil
-                    if available_width > lw then
-                        text = label
-                        text_w = lw
-                    else
-                        local initial = label:sub(1,1)
-                        local llw, llh  = ImGui.CalcTextSize(ctx, initial)
-                        if available_width > llw then
-                            text = initial
-                            text_w = llw
-                        end
+                local font_size = Sticker.DEFAULT_SIZE
+                local cursor_x, cursor_y = x2 - margin, y1 + margin -- Align top right
+
+                local slot_stickers = Sticker.UnpackCollection(thing.notes:slotStickers(slot), thing, slot)
+                local num_on_line = 0
+                ImGui.DrawList_PushClipRect(draw_list, x1 + 3, y1 + 3, x2 + 3, y2 - 3)
+                for _, sticker in ipairs(slot_stickers) do
+                    local metrics = sticker:PreRender(ctx, font_size)
+
+                    local available_width = cursor_x - (x1 + margin)
+                    if num_on_line ~= 0 and (available_width < metrics.width) then
+                        cursor_x = x2 - margin
+                        cursor_y = cursor_y + metrics.height + vpad
+                        num_on_line = 0
                     end
-                    if text then
-                        local rx    = x2 - margin - 2 * padding_h - text_w
-                        local ry    = y1 + margin
-                        local rx_r  = x2 - margin
-                        local rx_b  = y1 + margin + lh + 2 * padding_v
-                        ImGui.DrawList_AddRectFilled(draw_list, rx, ry, rx_r, rx_b, bg_color | 0xFF, 2)
-                        ImGui.DrawList_AddRect(draw_list,       rx, ry, rx_r, rx_b, 0x000000FF, 2)
-                        ImGui.DrawList_AddText(draw_list, x2 - margin - padding_h - text_w, y1 + margin + padding_v, 0x000000FF, text)
-                    end
+
+                    sticker:Render(ctx, metrics, cursor_x - metrics.width, cursor_y)
+                    cursor_x = cursor_x - metrics.width - hpad
+                    num_on_line = num_on_line + 1
                 end
-                ImGui.PopFont(ctx)
+                -- Force ImGui to extend bounds
+                ImGui.DrawList_PopClipRect(draw_list)
+                ImGui.Dummy(ctx,0,0)
 
                 -- Post-it triangles
                 if not (div == 0 and thing.clamped_left) then
-                    ImGui.DrawList_AddTriangleFilled(draw_list, x1, y1, x1 + triangle_size, y1, x1, y1 + triangle_size, border_color)
-                    ImGui.DrawList_AddTriangleFilled(draw_list, x1, y2, x1, y2 - triangle_size, x1 + triangle_size, y2, border_color)
+                    local ts = triangle_size * ((div == 0) and 1 or 0.7)
+                    ImGui.DrawList_AddTriangleFilled(draw_list, x1, y1, x1 + ts, y1, x1, y1 + ts, border_color)
+                    ImGui.DrawList_AddTriangleFilled(draw_list, x1, y2, x1, y2 - ts, x1 + ts, y2, border_color)
                 end
 
-                if not (div == divisions -1 and thing.clamped_right) then
-                    ImGui.DrawList_AddTriangleFilled(draw_list, x2 - triangle_size, y1, x2, y1, x2, y1 + triangle_size, border_color)
-                    ImGui.DrawList_AddTriangleFilled(draw_list, x2, y2, x2 - triangle_size, y2, x2, y2 - triangle_size, border_color)
+                if not (div == divisions - 1 and thing.clamped_right) then
+                    local ts = triangle_size * ((div == divisions - 1) and 1 or 0.7)
+                    ImGui.DrawList_AddTriangleFilled(draw_list, x2 - ts, y1, x2, y1, x2, y1 + ts, border_color)
+                    ImGui.DrawList_AddTriangleFilled(draw_list, x2, y2, x2 - ts, y2, x2, y2 - ts, border_color)
                 end
             end
         end

@@ -4,34 +4,46 @@
 -- @description This file is part of Reannotate
 
 local ImGui         = require "ext/imgui"
+local JSON          = require "ext/json"
 local AppContext    = require "classes/app_context"
 local EmojImGui     = require "emojimgui"
+local Notes         = require "classes/notes"
 
 local Sticker = {}
 Sticker.Types = {
     SPECIAL   = 0,
     STANDARD  = 1
 }
+Sticker.DEFAULT_SIZE = 12
 
 Sticker.__index = Sticker
 
-function Sticker:new(desc)
+function Sticker:new(packed_code, thing, slot)
     local instance = {}
     setmetatable(instance, self)
-    instance:_initialize(desc)
+    instance:_initialize(packed_code, thing, slot)
     return instance
 end
 
-function Sticker:_initialize(desc)
-    self.desc       = desc
-    local ret       = self:_parseHelper(self.desc)
+function Sticker:_initialize(packed_code, thing, slot)
+    local ret       = self:_parseHelper(packed_code)
 
     local fname = "OpenMoji"
     if ret.icon_font == 1 then fname = "TweMoji" end
 
     self.type       = ret.type
-    self.icon       = EmojImGui.Asset.CharInfo(fname, ret.icon)
+    self.icon       = EmojImGui.Asset.CharInfo(fname, ret.icon) -- May be nil
     self.text       = ret.text
+
+    self:attachToThingAndSlot(thing, slot)
+end
+
+function Sticker:attachToThingAndSlot(thing, slot)
+    self.thing      = thing
+    self.slot       = slot
+
+    self.color      = slot and (Notes.SlotColor(slot) << 8 | 0xFF) or 0xA0A000FF
+    self.text_color = 0x000000FF
 end
 
 function Sticker:_parseHelper(str)
@@ -47,9 +59,20 @@ function Sticker:_parseHelper(str)
     local type = tonumber(token)
 
     if type == Sticker.Types.SPECIAL then
+        local text = rest
+        local icon = nil
+        local font = nil
+
+        if text == 'checkboxes' then
+            font = 1
+            icon = "2611"
+        end
+
         return {
             type = type,
-            text = rest
+            text = rest,
+            icon = icon,
+            icon_font = font
         }
     elseif type == Sticker.Types.STANDARD then
         token, rest       = next_token(rest)
@@ -65,6 +88,39 @@ function Sticker:_parseHelper(str)
     end
 end
 
+function Sticker:textToRender()
+    local text = self.text
+    if self.type == Sticker.Types.SPECIAL then
+        if text == 'category' then
+            text = (self.slot) and (Notes.SlotLabel(self.slot)) or ("???")
+        elseif text == "checkboxes" then
+            if not self.thing then text = "? / ?" else
+                local counts = self.thing.notes:slotCheckboxCache(self.slot)
+                counts = counts or { t = 0, c = 0}
+                text = "" .. counts.c .. " / " .. counts.t
+            end
+        end
+    end
+
+    return text
+end
+
+function Sticker:isSpecial()
+    return self.type == Sticker.Types.SPECIAL
+end
+
+function Sticker:hasIcon()
+    return not (self.icon == nil)
+end
+
+function Sticker:hasText()
+    return not (self.text == '' or self.text == nil)
+end
+
+function Sticker:isEmpty()
+    return (not self:hasIcon()) and (not self:hasText())
+end
+
 function Sticker:renderBackground(draw_list, render_params)
     local istop     = render_params.metrics.icon_stop
     local min_x     = render_params.metrics.min_x
@@ -72,18 +128,26 @@ function Sticker:renderBackground(draw_list, render_params)
     local max_x     = render_params.metrics.max_x
     local max_y     = render_params.metrics.max_y
     local v_pad     = render_params.metrics.v_pad
-    local has_text  = (self.text and self.text ~= '')
+    local has_text  = self:hasText()
+
+    local alpha_d = 0
+    if render_params.metrics.hovered then
+        alpha_d = (math.floor(0x40 * math.sin(reaper.time_precise()*10)))
+    end
 
     if self.icon then
-        ImGui.DrawList_AddRectFilled(draw_list, min_x, min_y - v_pad, max_x, max_y + v_pad, (render_params.color & 0xFFFFFF00) | 0x40, 2)
+        -- Icon Background
+        ImGui.DrawList_AddRectFilled(draw_list, min_x, min_y - v_pad, max_x, max_y + v_pad, (render_params.color & 0xFFFFFF00) | (0x40 + alpha_d), 2)
+
         if has_text then
-            ImGui.DrawList_PushClipRect (draw_list, min_x + istop , min_y - v_pad, max_x, max_y + v_pad)
+            ImGui.DrawList_PushClipRect (draw_list, min_x + istop , min_y - v_pad, max_x, max_y + v_pad, true)
         end
     end
 
     -- Flashing background
     if has_text then
-        ImGui.DrawList_AddRectFilled  (draw_list, min_x, min_y - v_pad, max_x, max_y + v_pad, render_params.color, 2)
+        -- Text background
+        ImGui.DrawList_AddRectFilled  (draw_list, min_x, min_y - v_pad, max_x, max_y + v_pad, (render_params.color & 0xFFFFFF00) | (0xFF - 0x40 + alpha_d), 2)
     end
 
     if self.icon then
@@ -100,7 +164,7 @@ function Sticker:renderForeground(draw_list, render_params)
     local max_x     = render_params.metrics.max_x
     local max_y     = render_params.metrics.max_y
     local v_pad     = render_params.metrics.v_pad
-    local has_text  = (self.text and self.text ~= '')
+    local has_text  = self:hasText()
 
     local function _fullBorder(color)
         ImGui.DrawList_AddRect(draw_list, min_x, min_y - v_pad, max_x, max_y + v_pad, color, 1, 0, 1)
@@ -136,8 +200,8 @@ function Sticker:_renderPass(ctx, font_size, should_render, render_params)
     local app_ctx           = AppContext.instance()
     local draw_list         = ImGui.GetWindowDrawList(ctx)
 
-    local has_text          = sticker.text and sticker.text ~= ''
-    local icon_font_size    = font_size + 4
+    local has_text          = self:hasText()
+    local icon_font_size    = font_size + 0.5
 
     local icon_text_spacing = math.floor(font_size / 4.0 + 0.5)
     local h_pad             = math.floor(font_size / 2   + 0.5)
@@ -164,6 +228,11 @@ function Sticker:_renderPass(ctx, font_size, should_render, render_params)
         metrics.min_y   = min_y
         metrics.max_x   = max_x
         metrics.max_y   = max_y
+
+        local mx, my = ImGui.GetMousePos(ctx)
+        if ImGui.IsWindowHovered(ctx) and (min_x <= mx and mx <= max_x and min_y <= my and my <= max_y) then
+            metrics.hovered = true
+        end
     end
 
     local xcursor = 0
@@ -174,7 +243,7 @@ function Sticker:_renderPass(ctx, font_size, should_render, render_params)
         local diff_height = (hhh - base_text_height)
 
         if should_render then
-            ImGui.DrawList_AddText(draw_list, min_x + xcursor, min_y + v_pad - diff_height * 0.5 + 0.5, render_params.text_color, _txt)
+            ImGui.DrawList_AddText(draw_list, min_x + xcursor, min_y + v_pad - diff_height * 0.5, render_params.text_color, _txt)
         end
 
         xcursor = xcursor + www
@@ -185,36 +254,25 @@ function Sticker:_renderPass(ctx, font_size, should_render, render_params)
         self:renderBackground(draw_list, render_params)
     end
 
-    if sticker.type == Sticker.Types.SPECIAL then
-        -- Left blank padding
-        xcursor = xcursor + h_pad
+    if sticker.icon then
+        local font = EmojImGui.Asset.Font(ctx, sticker.icon.font_name)
+        xcursor = xcursor + icon_text_spacing
 
-        _textPass(app_ctx.arial_font, font_size, "TODO")
+        -- Draw the icon
+        _textPass(font, icon_font_size, sticker.icon.utf8)
+        xcursor = xcursor + icon_text_spacing
+        istop   = xcursor
 
-        -- Right blank padding
-        xcursor = xcursor + h_pad
-    else
-        if sticker.icon then
-            local font = EmojImGui.Asset.Font(ctx, sticker.icon.font_name)
-
+        if has_text then
             xcursor = xcursor + icon_text_spacing
-
-            -- Draw the icon
-            _textPass(font, icon_font_size, sticker.icon.utf8)
-            xcursor = xcursor + icon_text_spacing
-            istop   = xcursor
-
-            if has_text then
-                xcursor = xcursor + icon_text_spacing
-            end
-        else
-            xcursor = xcursor + h_pad
         end
+    else
+        xcursor = xcursor + h_pad
     end
 
     -- Render / Measure main text
     if has_text then
-        _textPass(app_ctx.arial_font, font_size, sticker.text)
+        _textPass(app_ctx.arial_font, font_size, sticker:textToRender())
         xcursor = xcursor + h_pad
     end
 
@@ -229,16 +287,20 @@ function Sticker:_renderPass(ctx, font_size, should_render, render_params)
         ImGui.SetCursorScreenPos(ctx, max_x, min_y)
     end
 
-    -- Return metrics
-    return {
-        width       = widget_width,
-        height      = widget_height,
-        spacing     = sticker_spacing,
-        icon_stop   = istop,
-        v_pad       = v_pad,
-        h_pad       = h_pad,
-        font_size   = font_size
-    }
+    if should_render then
+        return metrics.hovered
+    else
+        -- Return metrics
+        return {
+            width       = widget_width,
+            height      = widget_height,
+            spacing     = sticker_spacing,
+            icon_stop   = istop,
+            v_pad       = v_pad,
+            h_pad       = h_pad,
+            font_size   = font_size
+        }
+    end
 end
 
 -- Should be called to calculate the widget metrics, that will be passed to render
@@ -247,8 +309,125 @@ function Sticker:PreRender(ctx, font_size)
 end
 
 -- Render. Call pre-render to get metrics.
-function Sticker:Render(ctx, pre_render_metrics, xstart, ystart, color, text_color)
-    return self:_renderPass(ctx, pre_render_metrics.font_size, true, { metrics = pre_render_metrics, xstart = xstart, ystart = ystart, color = color, text_color = text_color } )
+function Sticker:Render(ctx, pre_render_metrics, xstart, ystart)
+    return self:_renderPass(ctx, pre_render_metrics.font_size, true, { metrics = pre_render_metrics, xstart = xstart, ystart = ystart, color = self.color, text_color = self.text_color } )
 end
+
+function Sticker:pack()
+    if self.type == Sticker.Types.SPECIAL then
+        return "" .. self.type .. ":" .. self.text
+    else
+        local icon_str = ":"
+        if self.icon then
+            local fid = (self.icon.font_name == "TweMoji") and 1 or 0
+            icon_str = "" .. fid .. ":" .. self.icon.id
+        end
+
+        return "" .. self.type .. ":" .. icon_str .. ":" .. self.text
+    end
+end
+
+function Sticker.NormalizeCollection(coll, remove_specials)
+    local lookup = {}
+    local valid  = {}
+    local lib    = coll
+
+    lib = lib or {}
+
+    for _, sticker in ipairs(lib) do
+        -- Remove empty stickers and special stickers
+        if not sticker:isEmpty() and not (sticker:isSpecial() and remove_specials) then
+            -- Remove duplicated stickers
+            local sid = sticker:pack()
+            if not lookup[sid] then
+                lookup[sid]     = sticker
+                valid[#valid+1] = sticker
+            end
+        end
+    end
+
+    table.sort(valid, function(sticker1, sticker2)
+        if sticker1.type == Sticker.Types.SPECIAL then
+            if sticker2.type == Sticker.Types.SPECIAL then
+                return sticker1.text < sticker2.text
+            else
+                return true
+            end
+        elseif sticker2.type == Sticker.Types.SPECIAL then
+            return false
+        else
+            if not sticker1:hasText() then
+                if not sticker2:hasText() then
+                    -- Compare icon strings
+                    return sticker1.icon.id < sticker2.icon.id
+                else
+                    return true
+                end
+            elseif not sticker2:hasText() then
+                return false
+            else
+                -- Everyone has text
+                return string.lower(sticker1.text) < string.lower(sticker2.text)
+            end
+        end
+    end)
+
+    return valid
+end
+
+function Sticker.NormalizeLibrary(lib)
+    return Sticker.NormalizeCollection(lib, true)
+end
+
+-- Unpacks the stickers of a thing for a slot
+function Sticker.UnpackCollection(collection, thing, slot)
+    local slot_stickers_unpacked = {}
+    for _, stick in ipairs(collection) do
+        slot_stickers_unpacked[#slot_stickers_unpacked+1] = Sticker:new(stick, thing, slot)
+    end
+    slot_stickers_unpacked = Sticker.NormalizeCollection(slot_stickers_unpacked, false)
+    return slot_stickers_unpacked
+end
+
+function Sticker.PackCollection(collection)
+    local packed = {}
+    for _, sticker in ipairs(collection) do
+        packed[#packed+1] = sticker:pack()
+    end
+    return packed
+end
+
+function Sticker.Library(thing, slot)
+    local lib_str = reaper.GetExtState("Reannotate", "StickerLibrary")
+    local ret = nil
+
+    pcall(function()
+        ret = JSON.decode(lib_str)
+    end)
+    ret = ret or {}
+
+    local stickers = {}
+    for _, sl in ipairs(ret) do
+        local s = nil
+        -- Safe unserialize...
+        pcall(function() s = Sticker:new(sl, thing, slot) end)
+        if s then
+            stickers[#stickers+1] = s
+        end
+    end
+
+    return Sticker.NormalizeLibrary(stickers)
+end
+
+function Sticker.StoreLibrary(lib)
+    local packed = Sticker.PackCollection(Sticker.NormalizeLibrary(lib))
+
+    local lib_str = JSON.encode(packed)
+    reaper.SetExtState("Reannotate", "StickerLibrary", lib_str, true)
+
+    return lib
+end
+
+
 
 return Sticker

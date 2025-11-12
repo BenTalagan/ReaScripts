@@ -1,6 +1,6 @@
 --[[
 @description Reannotate - Annotation tool for REAPER
-@version 0.3.7
+@version 0.3.8
 @author Ben 'Talagan' Babut
 @donation https://www.paypal.com/donate/?business=3YEZMY9D6U8NC&no_recurring=1&currency_code=EUR
 @license MIT
@@ -10,7 +10,9 @@
   Forum Thread https://forum.cockos.com/showthread.php?t=304147
 @metapackage
 @changelog
-  - [Rework] Adapted style to new ImGui's metrics behaviour
+  - [Feature] Introducing stickers
+  - [Enhance] Clamped top/bottom elements will not show colored border at the clamping place
+  - [Bug Fix] Reannotate was not DPI aware under windows
 @provides
   [nomain] talagan_Reannotate/ext/**/*
   [nomain] talagan_Reannotate/classes/**/*
