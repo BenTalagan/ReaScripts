@@ -1,12 +1,11 @@
 -- @description Simple project reconform
 -- @author AZ
--- @version 0.8.1
+-- @version 0.8
 -- @changelog
---   - fixed crash related to empty leading time in compared EDLs or projects
---   - fixed reconform option to not copy locked items if set
---   - fixed possible crash related to reference track creation with wrong index
---   - UI: move Advanced timing options
---   - Notifications: added notification for Create reference track buttons if there is lack of conditions.
+--   - New EDL parser that can cover more variants of EDL format
+--   - New feature for comparison two project tabs that are created from AAF
+--   - GUI improvements
+--   - fix: respect project time offset properly
 -- @link Forum thread https://forum.cockos.com/showthread.php?t=293746
 -- @donation Donate via PayPal https://www.paypal.me/AZsound
 -- @about
@@ -171,7 +170,7 @@ function OptionsWindow()
     reaper.ShowMessageBox('Please, install ReaImGui from Reapack!', 'No Imgui library', 0)
     return
   end
-  dofile(imgui_path) '0.9.3'
+  dofile(imgui_path) '0.9.2'
   OptionsDefaults()
   GetExtStates()
   local fontSize = 17
@@ -611,14 +610,50 @@ function OptionsWindow()
               end
               
               if abort ~= true then CreateRefTrack(CompResult, ReferenceFile) end
-            else
-              reaper.ShowMessageBox('Choose both EDLs and a reference file first.', 'Simple Rroject Reconform', 0)
             end
           end
           if OldEDL and NewEDL and ReferenceFile then reaper.ImGui_PopStyleColor(ctx, 3) end
           --reaper.ImGui_NewLine(ctx)
           --reaper.ImGui_NewLine(ctx)
           
+          reaper.ImGui_SameLine(ctx, fontSize*10.5, nil)
+          reaper.ImGui_PushFont(ctx, fontSep)
+          if reaper.ImGui_CollapsingHeader(ctx, 'Advanced timing options') then
+            reaper.ImGui_NewLine(ctx)
+            reaper.ImGui_SameLine(ctx, fontSize*10.5, nil)
+            local childAdvflags = Flags.childBorder | Flags.childAutoResizeY --| Flags.childAutoResizeX
+            local advOpt = reaper.ImGui_BeginChild(ctx, 'advOpt', 0, 0, childAdvflags, nil)
+            if advOpt then
+              local ret 
+              ret, old_TrimLeadingTime = reaper.ImGui_Checkbox(ctx,'Ignore leading time in OLD EDLs',old_TrimLeadingTime)
+              if ret == true then reaper.SetProjExtState(0,ExtStateName,'old_TrimLeadingTime', tostring(old_TrimLeadingTime), true) end 
+              
+              reaper.ImGui_PushItemWidth(ctx, fontSize*5.3 )
+              ret, TrimOldTime = reaper.ImGui_InputText(ctx, '##1', TrimOldTime, nil, nil)
+              if ret == true then reaper.SetProjExtState(0, ExtStateName,'TrimOldTime', TrimOldTime, true) end
+              reaper.ImGui_SameLine(ctx, nil, fontSize)
+              ret, old_TrimOnlyEmptyTime = reaper.ImGui_Checkbox(ctx,'Only empty time if multiplied##1',old_TrimOnlyEmptyTime)
+              if ret == true then reaper.SetProjExtState(0,ExtStateName,'old_TrimOnlyEmptyTime', tostring(old_TrimOnlyEmptyTime), true) end
+              
+              ---
+              
+              ret, new_TrimLeadingTime = reaper.ImGui_Checkbox(ctx,'Ignore leading time in NEW EDLs',new_TrimLeadingTime)
+              if ret == true then reaper.SetProjExtState(0,ExtStateName,'new_TrimLeadingTime', tostring(new_TrimLeadingTime), true) end 
+              
+              reaper.ImGui_PushItemWidth(ctx, fontSize*5.3 )
+              ret, TrimNewTime = reaper.ImGui_InputText(ctx, '##2', TrimNewTime, nil, nil)
+              if ret == true then reaper.SetProjExtState(0, ExtStateName,'TrimNewTime', TrimNewTime, true) end
+              reaper.ImGui_SameLine(ctx, nil, fontSize)
+              ret, new_TrimOnlyEmptyTime = reaper.ImGui_Checkbox(ctx,'Only empty time if multiplied##2',new_TrimOnlyEmptyTime)
+              if ret == true then reaper.SetProjExtState(0,ExtStateName,'new_TrimOnlyEmptyTime', tostring(new_TrimOnlyEmptyTime), true) end
+               
+              reaper.ImGui_EndChild(ctx)
+            end
+            
+            
+          end
+          reaper.ImGui_PopFont(ctx)
+          reaper.ImGui_NewLine(ctx)
           
           reaper.ImGui_EndChild(ctx)
         end
@@ -627,48 +662,6 @@ function OptionsWindow()
       end
       --------end of EDL section
       
-      --------Adv timing options 
-      reaper.ImGui_NewLine(ctx)
-      reaper.ImGui_SameLine(ctx, fontSize*22, nil)
-      reaper.ImGui_PushFont(ctx, fontSep)
-      if reaper.ImGui_CollapsingHeader(ctx, 'Advanced timing options') then
-        reaper.ImGui_NewLine(ctx)
-        reaper.ImGui_SameLine(ctx, fontSize*10.5, nil)
-        local childAdvflags = Flags.childBorder | Flags.childAutoResizeY --| Flags.childAutoResizeX
-        local advOpt = reaper.ImGui_BeginChild(ctx, 'advOpt', 0, 0, childAdvflags, nil)
-        if advOpt then
-          local ret 
-          ret, old_TrimLeadingTime = reaper.ImGui_Checkbox(ctx,'Ignore leading time in OLD EDLs or project tab',old_TrimLeadingTime)
-          if ret == true then reaper.SetProjExtState(0,ExtStateName,'old_TrimLeadingTime', tostring(old_TrimLeadingTime), true) end 
-          
-          reaper.ImGui_PushItemWidth(ctx, fontSize*5.3 )
-          ret, TrimOldTime = reaper.ImGui_InputText(ctx, '##1', TrimOldTime, nil, nil)
-          if ret == true then reaper.SetProjExtState(0, ExtStateName,'TrimOldTime', TrimOldTime, true) end
-          reaper.ImGui_SameLine(ctx, nil, fontSize)
-          ret, old_TrimOnlyEmptyTime = reaper.ImGui_Checkbox(ctx,'Only empty time if multiplied##1',old_TrimOnlyEmptyTime)
-          if ret == true then reaper.SetProjExtState(0,ExtStateName,'old_TrimOnlyEmptyTime', tostring(old_TrimOnlyEmptyTime), true) end
-          
-          ---
-          
-          ret, new_TrimLeadingTime = reaper.ImGui_Checkbox(ctx,'Ignore leading time in NEW EDLs or project tab',new_TrimLeadingTime)
-          if ret == true then reaper.SetProjExtState(0,ExtStateName,'new_TrimLeadingTime', tostring(new_TrimLeadingTime), true) end 
-          
-          reaper.ImGui_PushItemWidth(ctx, fontSize*5.3 )
-          ret, TrimNewTime = reaper.ImGui_InputText(ctx, '##2', TrimNewTime, nil, nil)
-          if ret == true then reaper.SetProjExtState(0, ExtStateName,'TrimNewTime', TrimNewTime, true) end
-          reaper.ImGui_SameLine(ctx, nil, fontSize)
-          ret, new_TrimOnlyEmptyTime = reaper.ImGui_Checkbox(ctx,'Only empty time if multiplied##2',new_TrimOnlyEmptyTime)
-          if ret == true then reaper.SetProjExtState(0,ExtStateName,'new_TrimOnlyEmptyTime', tostring(new_TrimOnlyEmptyTime), true) end
-           
-          reaper.ImGui_EndChild(ctx)
-        end
-        
-        
-      end
-      reaper.ImGui_PopFont(ctx) 
-      
-      
-      -------Preject section
       if reaper.ImGui_CollapsingHeader(ctx, 'Create reference track by comparing two projects tabs') then
         reaper.ImGui_NewLine(ctx)
         OldPrjAAF, OldPrjPreview = ProjectSelector(OldPrjAAF, "Old Project", OldPrjPreview)
@@ -748,7 +741,7 @@ function OptionsWindow()
             end
             
             if abort ~= true then
-              CompResult = CompareEDLs(OldEdlTable, NewEdlTable)
+              CompResult = CompareEDLs(OldEdlTable, NewEdlTable) 
               if #CompResult == 0 then
                 reaper.ShowMessageBox('There ara no matched areas', 'Warning!',0)
                 abort = true
@@ -756,8 +749,6 @@ function OptionsWindow()
             end
             
             if abort ~= true then CreateRefTrack(CompResult, ReferenceFile) end
-          else
-            reaper.ShowMessageBox('Choose both projects and a reference file first.', 'Simple Rroject Reconform', 0)
           end
         end
         
@@ -1300,9 +1291,7 @@ function CreateRefTrack(Items, file) --each item = {oldstart, oldend, targetpos}
   file = file[1]
   local startPoint = OldPrjStart
   if NewPrjStart then startPoint = NewPrjStart end
-  reaper.Undo_BeginBlock2(0)
-  local allTrcnt = reaper.CountTracks(0)
-  if RefTrIdx > allTrcnt then RefTrIdx = allTrcnt end
+  reaper.Undo_BeginBlock2(0) 
   reaper.InsertTrackAtIndex(RefTrIdx, true)
   local track = reaper.GetTrack(0,RefTrIdx)
   local newSrc = reaper.PCM_Source_CreateFromFile( file )
@@ -1719,8 +1708,8 @@ function AnalyseEDLs(EDLs, timeTreshold) --table of pathes
     end
     
   end --end of edl files cycle
-  
-  
+    
+  --GO HERE IN FUTURE after parsing project info if the Project Analyse used instead of EDL one.
   CleanUpEDL(CommonEDL, Splits)
     
   return CommonEDL
@@ -2107,7 +2096,7 @@ function CleanUpEDL(CommonEDL, Splits)
   
   table.sort(CommonEDL, function(a,b) return (a.DestIn < b.DestIn) end)
   
-  --ADD ITEMS WITH EMPTY "CLIPS" TABLE FOR GAPS 
+  --ADD ITEMS WITH EMPTY "CLIPS" TABLE FOR GAPS
   local prevEnd
   local i = #CommonEDL
   while i > 0 do
@@ -2168,14 +2157,14 @@ function CompareEDLs(OLD, NEW)
   
   if oldLeadEmpty
   and old_TrimLeadingTime == true and old_TrimOnlyEmptyTime == true
-  and oldLeadEmpty >= reaper.parse_timestr_pos( TrimOldTime, 5 ) - PrjTimeOffset then 
-    TrimOldEmpty = oldLeadEmpty - math.fmod(oldLeadEmpty, (reaper.parse_timestr_pos(TrimOldTime, 5)-PrjTimeOffset) )
+  and oldLeadEmpty >= reaper.parse_timestr_pos( TrimOldTime, 5 ) - PrjTimeOffset then
+    TrimOldEmpty = oldLeadEmpty - math.fmod(oldLeadEmpty / (reaper.parse_timestr_pos(TrimOldTime, 5)-PrjTimeOffset) )
   end
   
   if newLeadEmpty
   and new_TrimLeadingTime == true and new_TrimOnlyEmptyTime == true
   and newLeadEmpty >= reaper.parse_timestr_pos( TrimNewTime, 5 ) - PrjTimeOffset then
-    TrimNewEmpty = newLeadEmpty - math.fmod(newLeadEmpty, (reaper.parse_timestr_pos(TrimNewTime, 5)-PrjTimeOffset) )
+    TrimNewEmpty = newLeadEmpty - math.fmod(newLeadEmpty / (reaper.parse_timestr_pos(TrimNewTime, 5)-PrjTimeOffset) )
   end
   
   ------
@@ -3211,33 +3200,18 @@ end
 
 -----------------------------
 
-function RestoreLockedItems(newTimeStart, newTimeEnd)
+function RestoreLockedItems()
   local parmname = 'P_EXT:'..'SimpleReconf_AZ'..'lock'
-  local itemsToDel = {}
   local icnt = reaper.CountMediaItems(0)
-  
   for i = 0, icnt -1 do
     local item = reaper.GetMediaItem(0,i)
     local ret, str = reaper.GetSetMediaItemInfo_String( item, parmname, tostring(itemLocked), false )
     
     if tonumber(str) == 1 then
       ret, str = reaper.GetSetMediaItemInfo_String( item, parmname, '', true )
-      local pos = round(reaper.GetMediaItemInfo_Value(item, 'D_POSITION'), 5)
-      
-      if Opt.ReconfLockedItems ~= true 
-      and round(newTimeStart, 5) <= pos and round(newTimeEnd, 5) >= pos then
-        table.insert(itemsToDel, item)
-      else reaper.SetMediaItemInfo_Value(item, 'C_LOCK', 1)
-      end
-      
+      reaper.SetMediaItemInfo_Value(item, 'C_LOCK', 1)
     end
   end
-  
-  for i, item in ipairs(itemsToDel) do
-    local tr = reaper.GetMediaItemTrack(item)
-    reaper.DeleteTrackMediaItem(tr, item)
-  end
-  
 end
 
 -----------------------------
@@ -3505,7 +3479,7 @@ function main()
     end
   end
   
-  SaveAndUnlockItems()
+  if Opt.ReconfLockedItems == true then SaveAndUnlockItems() end
   if Opt.ReconfDisabledLanes == true then ToggleDisableLanes(false) end
   
   local razorAffectsEnvs = reaper.GetToggleCommandState(42459) -- Options: Razor edits in media item lane affect all track envelopes
@@ -3604,7 +3578,7 @@ function main()
   
   RemoveExtraPoints(refItems)
   RestoreEnvVis()
-  RestoreLockedItems(wholeAreaStart, wholeAreaEnd)
+  if Opt.ReconfLockedItems == true then RestoreLockedItems() end
   reaper.SelectAllMediaItems(0, false)
   if Opt.ReconfDisabledLanes == true then ToggleDisableLanes(true) end
   

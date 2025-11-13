@@ -10,7 +10,9 @@
   Forum Thread https://forum.cockos.com/showthread.php?t=304147
 @metapackage
 @changelog
-  - [Bug Fix] Fixing case where the user does not use "Main Toolbar" as main toolbar (thanks Denys!)
+  - [Feature] Introducing stickers
+  - [Enhance] Clamped top/bottom elements will not show colored border at the clamping place
+  - [Bug Fix] Reannotate was not DPI aware under windows
 @provides
   [nomain] talagan_Reannotate/ext/**/*
   [nomain] talagan_Reannotate/classes/**/*
