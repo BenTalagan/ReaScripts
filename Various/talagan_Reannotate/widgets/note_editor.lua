@@ -5,10 +5,10 @@
 
 local ImGui         = require "ext/imgui"
 local AppContext    = require "classes/app_context"
-local Notes         = require "classes/notes"
 local Color         = require "classes/color"
 local StickerPicker = require "widgets/sticker_picker"
 local Sticker       = require "classes/sticker"
+local D             = require "modules/defines"
 
 local NoteEditor = {}
 NoteEditor.__index = NoteEditor
@@ -85,7 +85,7 @@ function NoteEditor:renderStickerZone(ctx, stickers, should_go_to_line)
   local xc, yc          = ImGui.GetCursorScreenPos(ctx)
   local last_vspacing   = nil
   local clicked         = nil
-  local color           = Color:new(Notes.SlotColor(self.edited_slot)):to_irgba()
+  local color           = Color:new(D.SlotColor(self.edited_slot)):to_irgba()
 
   for _, sticker in ipairs(stickers) do
     local metrics           = sticker:PreRender(ctx, self.sticker_base_size)
@@ -192,19 +192,19 @@ function NoteEditor:draw()
       ImGui.Function_SetValue(app_ctx.cursor_func, "WANTED_CURSOR", string.len(entry))
     end
 
-    local sel_col = Color:new(Notes.SlotColor(self.edited_slot))
+    local sel_col = Color:new(D.SlotColor(self.edited_slot))
     ImGui.PushStyleColor(ctx, ImGui.Col_TabSelected, sel_col:to_irgba())
 
     if ImGui.BeginTabBar(ctx, "Test##note_editor_tab", ImGui.TabBarFlags_NoCloseWithMiddleMouseButton | ImGui.TabBarFlags_NoTabListScrollingButtons) then
 
       local selection_has_changed = (self.last_selected_tab ~= self.edited_slot)
 
-      for i=0, Notes.MAX_SLOTS-1 do
-        local slot    = (i==Notes.MAX_SLOTS - 1) and (0) or (i+1) -- Put SWS/Reaper at the end
+      for i=0, D.MAX_SLOTS-1 do
+        local slot    = (i==D.MAX_SLOTS - 1) and (0) or (i+1) -- Put SWS/Reaper at the end
 
         if slot == 0 and self.edited_thing.type == "env" then
         else
-          local col     = Color:new(Notes.SlotColor(slot))
+          local col     = Color:new(D.SlotColor(slot))
           local h, s, v = col:hsv()
 
           local tab_col = Color:new(0)
@@ -221,7 +221,7 @@ function NoteEditor:draw()
             flags = flags | ImGui.TabItemFlags_SetSelected
           end
 
-          local e_vis, e_sel = ImGui.BeginTabItem(ctx, Notes.SlotLabel(slot), false, flags)
+          local e_vis, e_sel = ImGui.BeginTabItem(ctx, D.SlotLabel(slot), false, flags)
 
           if e_vis then
             -- The tab api is awfull and needs to track things to avoid race conditions
@@ -257,7 +257,7 @@ function NoteEditor:draw()
 
     local slot_stickers = self.edited_thing.notes:slotStickers(self.edited_slot)
     if #slot_stickers > 0 then
-      slot_stickers = Sticker.UnpackCollection(slot_stickers, self.edited_thing, self.edited_slot)
+      slot_stickers = slot_stickers
 
       local sticker_clicked = self:renderStickerZone(ctx, slot_stickers, false)
       if sticker_clicked and ImGui.IsKeyDown(ctx, ImGui.Mod_Ctrl) then
@@ -268,8 +268,8 @@ function NoteEditor:draw()
             stickers[#stickers+1] = s
           end
         end
-        local stickers_packed = Sticker.PackCollection(Sticker.NormalizeCollection(stickers, false))
-        self.edited_thing.notes:setSlotStickers(self.edited_slot, stickers_packed)
+        local stickers_patched = Sticker.NormalizeCollection(stickers, false)
+        self.edited_thing.notes:setSlotStickers(self.edited_slot, stickers_patched)
         self.edited_thing.notes:commit()
       end
     end
@@ -324,15 +324,13 @@ function NoteEditor:draw()
         self.sticker_picker.open = false
 
         -- Get stickers from slot
-        local stickers_packed = self.edited_thing.notes:slotStickers(self.edited_slot)
-        -- Unpack stickers
-        local stickers        = Sticker.UnpackCollection(stickers_packed, self.edited_thing, self.edited_slot)
+        local stickers = self.edited_thing.notes:slotStickers(self.edited_slot)
         -- Add sticker to slot
         stickers[#stickers+1] = picked_sticker
-        -- Repack
-        stickers_packed = Sticker.PackCollection(Sticker.NormalizeCollection(stickers, false))
+        -- Normalize (sort/uniq/etc)
+        stickers = Sticker.NormalizeCollection(stickers, false)
 
-        self.edited_thing.notes:setSlotStickers(self.edited_slot, stickers_packed)
+        self.edited_thing.notes:setSlotStickers(self.edited_slot, stickers)
         self.edited_thing.notes:commit()
       end
     end

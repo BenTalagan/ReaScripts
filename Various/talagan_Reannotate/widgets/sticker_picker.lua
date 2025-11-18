@@ -7,7 +7,7 @@ local ImGui         = require "ext/imgui"
 local AppContext    = require "classes/app_context"
 local Sticker       = require "classes/sticker"
 local StickerEditor = require "widgets/sticker_editor"
-local Notes         = require "classes/notes"
+local D             = require "modules/defines"
 
 local StickerPicker = {}
 StickerPicker.__index = StickerPicker
@@ -28,7 +28,7 @@ function StickerPicker:_initialize(thing, slot)
   self.thing              = thing
   self.slot               = slot
 
-  self.color              = (Notes.SlotColor(slot) << 8) | 0xFF
+  self.color              = (D.SlotColor(slot) << 8) | 0xFF
 
   self:pull()
 end
@@ -175,8 +175,12 @@ function StickerPicker:draw()
     local list = self.sticker_library
 
     ImGui.SeparatorText(ctx, "Special Stickers")
-    picked = picked or self:renderStickerZone(ctx, { Sticker:new("0:category", self.thing, self.slot), Sticker:new("0:checkboxes", self.thing, self.slot) }, true)
+    picked = picked or self:renderStickerZone(ctx, {
+      Sticker:new("0:category",   self.thing.notes, self.slot),
+      Sticker:new("0:checkboxes", self.thing.notes, self.slot)
+    }, true)
 
+---@diagnostic disable-next-line: redundant-parameter
     ImGui.PushFont(ctx, app_ctx.arial_font, 12)
     ImGui.SeparatorText(ctx, "Custom Stickers        ")
     ImGui.SameLine(ctx,0,5)

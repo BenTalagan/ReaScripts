@@ -9,10 +9,10 @@ local ImGuiMd           = require "reaimgui_markdown"
 local Notes             = require "classes/notes"
 
 local NoteEditor        = require "widgets/note_editor"
-local SettingsEditor    = require "widgets/settings_editor"
 local OverlayCanvas     = require "widgets/overlay_canvas"
 
 local S                 = require "modules/settings"
+local D                 = require "modules/defines"
 
 local reaper_ext        = require "modules/reaper_ext"
 
@@ -67,6 +67,7 @@ end
 function QuickPreviewOverlay:_initialize()
     self.visible_things  = {}
     self.filter_str = ''
+    self.rand = math.random()
 end
 
 function QuickPreviewOverlay:timeToPixels(app_ctx, time)
@@ -154,6 +155,52 @@ function QuickPreviewOverlay:buildEditContextForThing(object, type, track_num, p
         -- Track num
         track_num   = track_num + 1
     }
+end
+
+function QuickPreviewOverlay:fullSearch()
+    -- Search project
+    -- Search tracks
+    -- Search items
+    -- Search enveloppes
+
+    local t1 = reaper.time_precise()
+    local all_things = {}
+    local proj              = reaper.EnumProjects(-1)
+    local proj_entry, _     = self:buildEditContextForThing(proj, "project", -1)
+    table.insert(all_things, proj_entry)
+
+    -- Get total number of tracks
+    local track_count = reaper.CountTracks(0)
+
+    -- Iterate through tracks
+    for i = -1, track_count - 1 do
+        local is_master         = (i==-1)
+        local track             = is_master and reaper.GetMasterTrack(0) or reaper.GetTrack(0, i)
+
+        -- Track
+        local track_entry = self:buildEditContextForThing(track, "track", i)
+        table.insert(all_things, track_entry)
+
+        -- Items
+        local item_count = reaper.CountTrackMediaItems(track)
+        for j = 0, item_count - 1 do
+            local item = reaper.GetTrackMediaItem(track, j)
+            table.insert(all_things, self:buildEditContextForThing(item, "item", i))
+        end
+
+        -- Envelopes
+        local ei                = 0
+        while true do
+            local envelope = reaper.GetTrackEnvelope(track, ei)
+            if not envelope then break end
+
+            local env_entry = self:buildEditContextForThing(envelope, "env", i)
+            table.insert(all_things, env_entry)
+
+            ei = ei + 1
+        end
+    end
+    reaper.ShowConsoleMsg("" .. #all_things .. " " .. reaper.time_precise() - t1 .. "\n")
 end
 
 function QuickPreviewOverlay:updateVisibleThings()
@@ -334,13 +381,20 @@ function QuickPreviewOverlay:updateVisibleThings()
         table.insert(self.visible_things, proj_entry)
     end
 
-    for _, thing in ipairs(self.visible_things) do
-        self:applySearchToThing(thing)
-    end
+    -- Visibility has changed, reapply the search
+    self:applySearch()
 end
 
 function QuickPreviewOverlay:title()
     return "Reannotate Quick Preview"
+end
+
+function QuickPreviewOverlay:applySearch()
+    for _, thing in ipairs(self.visible_things) do
+        self:applySearchToThing(thing)
+    end
+
+    --self:fullSearch()
 end
 
 
@@ -354,7 +408,7 @@ function QuickPreviewOverlay:applySearchToThing(thing)
         search_str = search_str:lower()
     end
 
-    for i=0, Notes.MAX_SLOTS - 1 do
+    for i=0, D.MAX_SLOTS - 1 do
         local slot      = i
         local slotNotes = thing.notes:slotText(slot)
 
@@ -377,6 +431,8 @@ function QuickPreviewOverlay:minimizeTopWindowsAtLaunch()
     if false then
         local c, l = reaper.JS_Window_ListAllTop()
         for token in string.gmatch(l, "[^,]+") do
+
+---@diagnostic disable-next-line: param-type-mismatch
             local subhwnd = reaper.JS_Window_HandleFromAddress(token)
             if not subhwnd then return end
 
@@ -474,7 +530,7 @@ function QuickPreviewOverlay:currentTooltipSizeForThing(thing)
     local slot = (thing == self.pinned_thing) and (thing.capture_slot) or (thing.hovered_slot)
 
     if slot == -1 then
-        return Notes.defaultTooltipSize()
+        return D.defaultTooltipSize()
     end
 
     return thing.notes:tooltipSize(slot or 0)
@@ -577,12 +633,10 @@ function QuickPreviewOverlay:drawTooltip()
         local slot_to_tooltip   = ((self.note_editor) and (self.note_editor.edited_slot)) or (pinned_thing and pinned_thing.capture_slot) or (thing_to_tooltip.hovered_slot)
         local tttext            = (slot_to_tooltip == -1) and (thing_to_tooltip.no_notes_message) or (thing_to_tooltip.notes:slotText(slot_to_tooltip))
         if tttext == "" or tttext == nil then
-            tttext = "`:grey:No " .. thing_to_tooltip.type .. " notes for the `_:grey:" .. Notes.SlotLabel(slot_to_tooltip):lower() .. "_ `:grey:category`"
+            tttext = "`:grey:No " .. thing_to_tooltip.type .. " notes for the `_:grey:" .. D.SlotLabel(slot_to_tooltip):lower() .. "_ `:grey:category`"
         end
 
-        self.mdwidget:setText(tttext)
-
-        ImGui.SetNextWindowBgAlpha(ctx, 1)
+        local ttw, tth          = self:currentTooltipSizeForThing(thing_to_tooltip)
 
         if self.note_editor or pinned_thing then
             -- If there's a note editor, fix the position
@@ -591,15 +645,24 @@ function QuickPreviewOverlay:drawTooltip()
             tt_pos = self:tooltipAdvisedPositionForThing(thing_to_tooltip, mx, my)
         end
 
-        local ttw, tth     = self:currentTooltipSizeForThing(thing_to_tooltip)
+        if thing_to_tooltip ~= self.last_tooltiped_thing or slot_to_tooltip ~= self.last_tooltiped_slot or tttext ~= self.last_tooltiped_text then
+            -- Reset the draw count if we need to show something else
+            self.tt_draw_count = 0
+        end
 
         -- First draw, force coordinates and size
         if self.tt_draw_count == 0 then
-            ImGui.SetNextWindowPos(ctx,     tt_pos.x, tt_pos.y)
-            ImGui.SetNextWindowSize(ctx,    ttw, tth)
+            ImGui.SetNextWindowSize(ctx, ttw, tth)
+            -- This will force the tooltip window re-creation to avoid keeping precedent state .. and have scrollbar bugs
+            self.rand = math.random()
         end
 
-        if ImGui.Begin(ctx, "Reannotate Notes (Tooltip)", true, ImGui.WindowFlags_NoFocusOnAppearing | ImGui.WindowFlags_NoTitleBar | ImGui.WindowFlags_TopMost | ImGui.WindowFlags_NoSavedSettings) then
+        self.mdwidget:setText(tttext)
+
+        ImGui.SetNextWindowBgAlpha(ctx, 1)
+        ImGui.SetNextWindowPos(ctx, tt_pos.x, tt_pos.y)
+
+        if ImGui.Begin(ctx, "Reannotate Notes (Tooltip)##" .. self.rand, true, ImGui.WindowFlags_NoFocusOnAppearing | ImGui.WindowFlags_NoTitleBar | ImGui.WindowFlags_TopMost | ImGui.WindowFlags_NoSavedSettings | ImGui.WindowFlags_NoScrollbar) then
             local cur_x, cur_y  = ImGui.GetWindowPos(ctx)
             local cur_w, cur_h  = ImGui.GetWindowSize(ctx)
             local draw_list     = ImGui.GetWindowDrawList(ctx)
@@ -619,14 +682,14 @@ function QuickPreviewOverlay:drawTooltip()
 
             -- Border. Tooltip is shown when edited or hoevered
             if (self.note_editor) or (not thing_to_tooltip.notes:isBlank() and ( thing_to_tooltip.hovered_slot ~= -1)) then
-                ImGui.DrawList_AddRect(draw_list, cur_x + 1, cur_y + 1, cur_x + cur_w - 1, cur_y + cur_h - 1, Notes.SlotColor(slot_to_tooltip) << 8 | 0xFF, 0, 0, 2)
+                ImGui.DrawList_AddRect(draw_list, cur_x + 1, cur_y + 1, cur_x + cur_w - 1, cur_y + cur_h - 1, D.SlotColor(slot_to_tooltip) << 8 | 0xFF, 0, 0, 2)
             end
 
             -- Resiszers
             if self.note_editor then
                 local triangle_size = 13
-                ImGui.DrawList_AddTriangleFilled(draw_list, cur_x, cur_y + cur_h, cur_x + triangle_size, cur_y + cur_h, cur_x, cur_y + cur_h - triangle_size, Notes.SlotColor(slot_to_tooltip) << 8 | 0xFF)
-                ImGui.DrawList_AddTriangleFilled(draw_list, cur_x + cur_w, cur_y + cur_h, cur_x + cur_w, cur_y + cur_h - triangle_size, cur_x + cur_w - triangle_size, cur_y + cur_h, Notes.SlotColor(slot_to_tooltip) << 8 | 0xFF)
+                ImGui.DrawList_AddTriangleFilled(draw_list, cur_x, cur_y + cur_h, cur_x + triangle_size, cur_y + cur_h, cur_x, cur_y + cur_h - triangle_size, D.SlotColor(slot_to_tooltip) << 8 | 0xFF)
+                ImGui.DrawList_AddTriangleFilled(draw_list, cur_x + cur_w, cur_y + cur_h, cur_x + cur_w, cur_y + cur_h - triangle_size, cur_x + cur_w - triangle_size, cur_y + cur_h, D.SlotColor(slot_to_tooltip) << 8 | 0xFF)
             end
 
             if self.note_editor and ImGui.IsMouseDoubleClicked(ctx, ImGui.MouseButton_Left) and ImGui.IsWindowHovered(ctx, ImGui.HoveredFlags_RootAndChildWindows) and self.mdwidget.max_x and self.mdwidget.max_y then
@@ -659,6 +722,10 @@ function QuickPreviewOverlay:drawTooltip()
 
             ImGui.End(ctx)
 
+            self.last_tooltiped_thing = thing_to_tooltip
+            self.last_tooltiped_slot  = slot_to_tooltip
+            self.last_tooltiped_text  = tttext
+
             self.tt_draw_count = (self.tt_draw_count or 0) + 1
         end
     else
@@ -672,6 +739,7 @@ function QuickPreviewOverlay:draw()
     local mx, my   = reaper.GetMousePosition()
     mx, my = ImGui.PointConvertNative(ctx, mx, my)
 
+---@diagnostic disable-next-line: redundant-parameter
     ImGui.PushFont(ctx, app_ctx.arial_font, 12)
 
     self.draw_count = self.draw_count or 0
@@ -722,8 +790,6 @@ function QuickPreviewOverlay:draw()
         self.hovered_thing.capture_xy    = self:tooltipAdvisedPositionForThing(self.hovered_thing, mx, my)
         self.hovered_thing.capture_slot  = self.hovered_thing.hovered_slot
 
-        self.tt_draw_count = 0
-
         self.note_editor = NoteEditor:new()
         self.note_editor:setEditedThing(self.hovered_thing)
         self.note_editor:setEditedSlot(self.hovered_thing.hovered_slot == -1 and 1 or self.hovered_thing.hovered_slot)
@@ -735,28 +801,20 @@ function QuickPreviewOverlay:draw()
         self.note_editor.slot_edit_change_callback = function()
             -- We may need to reposition the tooltip since it's changed
             self.note_editor.edited_thing.capture_xy = self:tooltipAdvisedPositionForEditedThingAndSlot(self.note_editor.edited_thing, self.note_editor.edited_slot, self.note_editor, mx, my)
-            -- Reset draw counter for tooltip to take position change into account
-            self.tt_draw_count = 0
         end
 
         self.note_editor.slot_commit_callback = function()
-            for _, thing in ipairs(self.visible_things) do
-                self:applySearchToThing(thing)
-            end
+            -- Content has changed, need to update the current search
+            self:applySearch()
         end
     end
 
     if self.hovered_thing and self.captured_right_click then
+        -- Pin position
         self.note_editor                 = nil
         self.hovered_thing.capture_xy    = self:tooltipAdvisedPositionForThing(self.hovered_thing, mx, my)
         self.hovered_thing.capture_slot  = self.hovered_thing.hovered_slot
         self.pinned_thing                = self.hovered_thing
-        self.tt_draw_count = 0
-    end
-
-    if self.hovered_thing and not self.note_editor then
-        -- Reset tooltip draw count so that the tooltip is not fixed
-        self.tt_draw_count = 0
     end
 
     if not self.hovered_thing and self.captured_click then

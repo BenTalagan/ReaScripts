@@ -23,7 +23,7 @@ function StickerEditor:_initialize(sticker, thing, slot)
   self.rand        = math.random()
   self.open        = true
   if not sticker then
-    sticker = Sticker:new("1:1::", thing, slot)
+    sticker = Sticker:new("1:1::", thing.notes, slot)
     self.new_record       = true
     self.packed_code_was  = nil
   else

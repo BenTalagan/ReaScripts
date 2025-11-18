@@ -7,6 +7,7 @@ local ImGui         = require "ext/imgui"
 local AppContext    = require "classes/app_context"
 local Notes         = require "classes/notes"
 local S             = require "modules/settings"
+local D             = require "modules/defines"
 
 local SettingsEditor = {}
 SettingsEditor.__index = SettingsEditor
@@ -57,13 +58,15 @@ function SettingsEditor:draw()
             ImGui.TableSetupColumn(ctx, "New Project")
             ImGui.TableSetupColumn(ctx, "Current Project")
             ImGui.TableHeadersRow(ctx)
-            for i=0, Notes.MAX_SLOTS-1 do
-                local slot = (i==Notes.MAX_SLOTS - 1) and (0) or (i+1)
+            for i=0, D.MAX_SLOTS-1 do
+                local slot = (i==D.MAX_SLOTS - 1) and (0) or (i+1)
                 ImGui.TableNextRow(ctx)
                 ImGui.TableNextColumn(ctx)
 
+---@diagnostic disable-next-line: undefined-field
                 ImGui.PushItemFlag(ctx, ImGui.ItemFlags_NoTabStop, true)
-                ImGui.ColorEdit4(ctx, "##col_slot_" .. i, (Notes.SlotColor(slot) << 8) | 0xFF, ImGui.ColorEditFlags_NoPicker | ImGui.ColorEditFlags_NoDragDrop | ImGui.ColorEditFlags_NoInputs | ImGui.ColorEditFlags_NoBorder | ImGui.ColorEditFlags_NoTooltip)
+                ImGui.ColorEdit4(ctx, "##col_slot_" .. i, (D.SlotColor(slot) << 8) | 0xFF, ImGui.ColorEditFlags_NoPicker | ImGui.ColorEditFlags_NoDragDrop | ImGui.ColorEditFlags_NoInputs | ImGui.ColorEditFlags_NoBorder | ImGui.ColorEditFlags_NoTooltip)
+---@diagnostic disable-next-line: undefined-field
                 ImGui.PopItemFlag(ctx)
 
                 --ImGui.Text(ctx,"y1")
@@ -76,30 +79,30 @@ function SettingsEditor:draw()
                         S.setSetting("SlotLabel_" .. slot, v)
                     end
                 else
-                    ImGui.Text(ctx, " " .. Notes.SlotLabel(slot))
+                    ImGui.Text(ctx, " " .. D.SlotLabel(slot))
                 end
                 ImGui.TableNextColumn(ctx)
                 ImGui.SetNextItemWidth(ctx, 150)
                 if slot ~= 0 then
-                    local b, v = ImGui.InputText(ctx, "##cur_proj_edit_slot_" .. i, Notes.SlotLabel(slot))
+                    local b, v = ImGui.InputText(ctx, "##cur_proj_edit_slot_" .. i, D.SlotLabel(slot))
                     if b then
                         Notes.SetSlotLabel(slot, v)
                     end
                 else
-                    ImGui.Text(ctx, " " .. Notes.SlotLabel(slot))
+                    ImGui.Text(ctx, " " .. D.SlotLabel(slot))
                 end
             end
             ImGui.TableNextRow(ctx)
             ImGui.TableNextColumn(ctx)
             ImGui.TableNextColumn(ctx)
             if ImGui.Button(ctx, "Reset to defaults##reset_global_labels_to_defaults_button") then
-                for i = 0, Notes.MAX_SLOTS-1 do
+                for i = 0, D.MAX_SLOTS-1 do
                     S.resetSetting("SlotLabel_"..i)
                 end
             end
             ImGui.TableNextColumn(ctx)
             if ImGui.Button(ctx, "Reset to defaults##reset_project_labels_to_defaults_button") then
-                for i = 0, Notes.MAX_SLOTS-1 do
+                for i = 0, D.MAX_SLOTS-1 do
                     Notes.SetSlotLabel(i, S.getSettingSpec("SlotLabel_"..i).default )
                 end
             end

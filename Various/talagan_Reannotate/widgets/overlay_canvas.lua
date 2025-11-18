@@ -5,9 +5,9 @@
 
 local ImGui             = require "ext/imgui"
 local AppContext        = require "classes/app_context"
-local Notes             = require "classes/notes"
 local SettingsEditor    = require "widgets/settings_editor"
 local Sticker           = require "classes/sticker"
+local D                 = require "modules/defines"
 
 local OverlayCanvas = {}
 OverlayCanvas.__index = OverlayCanvas
@@ -85,6 +85,7 @@ function OverlayCanvas:forwardEvent(event)
                     target = app_ctx.mcp_other.hwnd
             end
 
+---@diagnostic disable-next-line: param-type-mismatch
             reaper.JS_WindowMessage_Send(target, event, wpl, wph, lpl, lph)
             self.last_peeked_message_times[event] = time
         end
@@ -116,14 +117,15 @@ function OverlayCanvas:drawQuickSettings()
 
     local sinalpha          = (0xFF - 0x40 + math.floor(0x40 * math.sin(reaper.time_precise()*10)))
 
+---@diagnostic disable-next-line: redundant-parameter
     ImGui.PushFont(ctx, app_ctx.arial_font, 12)
 
     ImGui.DrawList_AddRectFilled(draw_list, app_ctx.main_toolbar.x, app_ctx.main_toolbar.y, app_ctx.main_toolbar.x + app_ctx.main_toolbar.w, app_ctx.main_toolbar.y + app_ctx.main_toolbar.h, 0x202020E0, 5)
     ImGui.DrawList_AddRect      (draw_list, app_ctx.main_toolbar.x, app_ctx.main_toolbar.y, app_ctx.main_toolbar.x + app_ctx.main_toolbar.w, app_ctx.main_toolbar.y + app_ctx.main_toolbar.h, 0xA0A0A0FF, 5)
 
-    for i=0, Notes.MAX_SLOTS - 1 do
-        local slot          = (i == Notes.MAX_SLOTS - 1) and (0) or (i+1)
-        local color         = (Notes.SlotColor(slot) << 8) | 0xFF
+    for i=0, D.MAX_SLOTS - 1 do
+        local slot          = (i == D.MAX_SLOTS - 1) and (0) or (i+1)
+        local color         = (D.SlotColor(slot) << 8) | 0xFF
         local l             = app_ctx.main_toolbar.x + (i * (2 * r + spacing)) + header_l + margin_l
         local t             = app_ctx.main_toolbar.y + margin_t
         local hovered       = (l - mid_spacing <= mx) and (mx <= l + mid_spacing + d) and (t - mid_spacing <= my) and (my <= t + mid_spacing + d) and ImGui.IsWindowHovered(ctx)
@@ -142,7 +144,7 @@ function OverlayCanvas:drawQuickSettings()
             ImGui.PushStyleVar(ctx, ImGui.StyleVar_WindowPadding, 3, 1)
             ImGui.PushStyleColor(ctx, ImGui.Col_PopupBg, color )
             ImGui.PushStyleColor(ctx, ImGui.Col_Text, 0x000000FF)
-            ImGui.SetTooltip(ctx, Notes.SlotLabel(slot))
+            ImGui.SetTooltip(ctx, D.SlotLabel(slot))
             ImGui.PopStyleColor(ctx, 2)
             ImGui.PopStyleVar(ctx)
         end
@@ -159,16 +161,16 @@ function OverlayCanvas:drawQuickSettings()
     ImGui.PushStyleVar(ctx, ImGui.StyleVar_FramePadding, 4, 3)
     ImGui.PushStyleVar(ctx, ImGui.StyleVar_FrameRounding, 2)
     if ImGui.Button(ctx, "All") then
-        for i=0, Notes.MAX_SLOTS - 1 do
-            local slot          = (i == Notes.MAX_SLOTS - 1) and (0) or (i+1)
+        for i=0, D.MAX_SLOTS - 1 do
+            local slot          = (i == D.MAX_SLOTS - 1) and (0) or (i+1)
             app_ctx.enabled_category_filters[slot+1] = true
         end
     end
     ImGui.PushStyleVar(ctx, ImGui.StyleVar_ItemSpacing, 3, 3)
     ImGui.SameLine(ctx)
     if ImGui.Button(ctx, "None") then
-        for i=0, Notes.MAX_SLOTS - 1 do
-            local slot          = (i == Notes.MAX_SLOTS - 1) and (0) or (i+1)
+        for i=0, D.MAX_SLOTS - 1 do
+            local slot          = (i == D.MAX_SLOTS - 1) and (0) or (i+1)
             app_ctx.enabled_category_filters[slot+1] = false
         end
     end
@@ -184,9 +186,7 @@ function OverlayCanvas:drawQuickSettings()
     local b, v = ImGui.InputTextWithHint(ctx, "##search_input", "Terms...", self.parent_overlay.filter_str,  ImGui.InputTextFlags_NoHorizontalScroll | ImGui.InputTextFlags_AutoSelectAll | ImGui.InputTextFlags_ParseEmptyRefVal )
     if b then
         self.parent_overlay.filter_str = v
-        for ti, thing in ipairs(visible_things) do
-            self.parent_overlay:applySearchToThing(thing)
-        end
+        self.parent_overlay:applySearch()
     end
     ImGui.PopStyleVar(ctx)
 
@@ -222,6 +222,7 @@ function OverlayCanvas:drawQuickSettings()
     if font_size > 26 then font_size = 26 end
     if font_size < 16 then font_size = 16 end
 
+---@diagnostic disable-next-line: redundant-parameter
     ImGui.PushFont(ctx, app_ctx.arial_font_italic, font_size)
     local rw, rh = ImGui.CalcTextSize(ctx, "Reannotate")
 
@@ -268,8 +269,7 @@ function OverlayCanvas:drawVisibleThing(thing)
     -- Calculate the number of divisions
     local divisions             = 0
     local has_notes_to_show     = false
-    local no_notes_message      = ""
-    for i=0, Notes.MAX_SLOTS - 1 do
+    for i=0, D.MAX_SLOTS - 1 do
         local is_slot_blank                 = thing.notes:isSlotBlank(i)
         local is_slot_enabled               = app_ctx.enabled_category_filters[i + 1]
         local the_slot_matches_the_search   = (thing.search_results[i + 1])
@@ -282,11 +282,6 @@ function OverlayCanvas:drawVisibleThing(thing)
     -- We should always show one division, even no note is shown
     if divisions == 0 then
         divisions = 1
-        if thing.notes:isBlank() then
-            no_notes_message = "`:grey:No " .. thing.type .. " notes`"
-        else
-            no_notes_message = "`:grey:All notes hidden`"
-        end
     end
 
     local mx, my    = ImGui.GetMousePos(ctx)
@@ -299,11 +294,11 @@ function OverlayCanvas:drawVisibleThing(thing)
     local step      = (hdivide) and (ww * 1.0 / divisions) or (hh * 1.0 / divisions)
 
     local div = -1
-    for i=0, Notes.MAX_SLOTS-1 do
+    for i=0, D.MAX_SLOTS-1 do
         -- We change the slot span order (1,2,3... and then 0)
         local is_no_note_slot   = (i==0 and not has_notes_to_show)
 
-        local slot              = (i==Notes.MAX_SLOTS - 1) and (0) or (i+1)
+        local slot              = (i==D.MAX_SLOTS - 1) and (0) or (i+1)
         local is_slot_enabled   = (is_no_note_slot or app_ctx.enabled_category_filters[slot + 1])
 
         local the_slot_matches_the_search  = (thing.search_results[slot+1])
@@ -325,7 +320,7 @@ function OverlayCanvas:drawVisibleThing(thing)
             if not is_no_note_slot then
                 border_width = 2
 
-                local base_color_with_note  = Notes.SlotColor(slot) << 8 --0xFF007000
+                local base_color_with_note  = D.SlotColor(slot) << 8 --0xFF007000
                 bg_color     = base_color_with_note | 0x30
                 border_color = base_color_with_note | 0xF0
             end
@@ -346,6 +341,14 @@ function OverlayCanvas:drawVisibleThing(thing)
                             thing.tcp_entry.hovered_slot = thing.hovered_slot
                         end
                     else
+                        local no_notes_message = ""
+
+                        if thing.notes:isBlank() then
+                            no_notes_message = "`:grey:No " .. thing.type .. " notes`"
+                        else
+                            no_notes_message = "`:grey:All notes hidden`"
+                        end
+
                         -- This is dangerous, but don't really have the choice with the current model :/
                         thing.hovered_slot = -1
                         thing.no_notes_message = no_notes_message
@@ -412,7 +415,7 @@ function OverlayCanvas:drawVisibleThing(thing)
 
                 local cursor_x, cursor_y = x2 - hmargin, y1 + vmargin -- Align top right
 
-                local slot_stickers = Sticker.UnpackCollection(thing.notes:slotStickers(slot), thing, slot)
+                local slot_stickers = thing.notes:slotStickers(slot)
                 local num_on_line = 0
                 ImGui.DrawList_PushClipRect(draw_list, x1 + 3, y1 + 3, x2 + 3, y2 - 3)
                 for _, sticker in ipairs(slot_stickers) do
