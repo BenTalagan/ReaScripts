@@ -30,7 +30,7 @@ function StickerPicker:_initialize(thing, slot)
 
   self.color              = (D.SlotColor(slot) << 8) | 0xFF
 
-  self:pull()
+  self:pullLibrary()
 end
 
 function StickerPicker:setPosition(x,y)
@@ -49,7 +49,7 @@ function StickerPicker:title()
   return "Sticker Library"
 end
 
-function StickerPicker:pull()
+function StickerPicker:pullLibrary()
   self.sticker_library = Sticker.Library(self.thing, self.slot)
 end
 

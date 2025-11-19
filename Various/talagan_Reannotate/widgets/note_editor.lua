@@ -48,22 +48,24 @@ function NoteEditor:GrabFocus()
 end
 
 function NoteEditor:title()
-  local t = "Editing annotations for "
+  local t     = "Editing annotations for "
+  local type  = self.edited_thing.cache.type
 
-  if self.edited_thing.type == "track" then
+  if type == "track" then
     t = t .. "Track"
-  elseif self.edited_thing.type == "env" then
+  elseif type == "env" then
     t = t .. "Envelope"
-  elseif self.edited_thing.type == "item" then
+  elseif type == "item" then
     t = t .. "Item"
-  elseif self.edited_thing.type == "project" then
+  elseif type == "project" then
     t = t .. "Project"
   else
     error("Unimplemented")
   end
 
-  t = t .. " "
-  t = t .. self.edited_thing.name
+  t = t .. " '"
+  t = t .. self.edited_thing.cache.name
+  t = t .. "'"
 
   return t
 end
@@ -202,7 +204,8 @@ function NoteEditor:draw()
       for i=0, D.MAX_SLOTS-1 do
         local slot    = (i==D.MAX_SLOTS - 1) and (0) or (i+1) -- Put SWS/Reaper at the end
 
-        if slot == 0 and self.edited_thing.type == "env" then
+        if slot == 0 and self.edited_thing.cache.type == "env" then
+          -- There's no envelope support for SWS/reaper natively
         else
           local col     = Color:new(D.SlotColor(slot))
           local h, s, v = col:hsv()
@@ -299,13 +302,9 @@ function NoteEditor:draw()
     end
 
     if b and is_open then
+      -- Commit on every text change
       self.edited_thing.notes:setSlotText(self.edited_slot, entry)
       self.edited_thing.notes:commit()
-
-      local alternate_entry = self.edited_thing.mcp_entry or self.edited_thing.tcp_entry
-      if alternate_entry then
-        alternate_entry.notes:pull()
-      end
       self:onSlotCommit()
     end
 

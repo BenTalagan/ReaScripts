@@ -15,6 +15,7 @@ local S                 = require "modules/settings"
 local D                 = require "modules/defines"
 
 local reaper_ext        = require "modules/reaper_ext"
+local MemCache          = require "classes/mem_cache"
 
 
 local function GetScreen(x, y)
@@ -94,7 +95,7 @@ function QuickPreviewOverlay:IsInReaper()
     end
 end
 
-function QuickPreviewOverlay:buildEditContextForThing(object, type, track_num, parent_widget_name, pos_x_pixels, pos_y_pixels, len_x_pixels, len_y_pixels, clamped_left, clamped_right, clamped_top, clamped_bottom)
+function QuickPreviewOverlay:buildEditContextForThing(object, track_num, parent_widget_name, pos_x_pixels, pos_y_pixels, len_x_pixels, len_y_pixels, clamped_left, clamped_right, clamped_top, clamped_bottom)
 
     local app_ctx   = AppContext.instance()
 
@@ -110,29 +111,15 @@ function QuickPreviewOverlay:buildEditContextForThing(object, type, track_num, p
         parent = app_ctx.time_ruler
     end
 
-    local name = ""
-    if type == 'track' then
-        local _, tname = reaper.GetTrackName(object)
-        name = tname
-    elseif type == 'item' then
-        local take = reaper.GetActiveTake(object)
-        if take then
-            name = reaper.GetTakeName(take)
-        end
-    elseif type == "env" then
-        local _, ename = reaper.GetEnvelopeName(object)
-        name = ename
-    elseif type == "project" then
-        name = "Project"
-    end
-
-    local notes                 = Notes:new(object)
+    -- Use a cache for various purposes. First one is to mutualize the notes pointer
+    -- As the MCP and TCP, for tracks, may point to the same entries (committing in one commits in the other one, its the same pointer)
+    -- Also, it avoids serializing and unserializing notes which may take time.
+    local cache = MemCache.instance():getObjectCache(object)
 
     return {
         -- Basic info
         object      = object,
         type        = type,
-        name        = name,
         -- Parent info
         parent      = parent,
         widget      = parent_widget_name,
@@ -145,8 +132,9 @@ function QuickPreviewOverlay:buildEditContextForThing(object, type, track_num, p
         clamped_right   = clamped_right,
         clamped_top     = clamped_top,
         clamped_bottom  = clamped_bottom,
-        -- Annotation info
-        notes       = notes,
+        -- Note info
+        cache       = cache,
+        notes       = cache.notes,
         -- Track num
         track_num   = track_num + 1
     }
@@ -158,10 +146,11 @@ function QuickPreviewOverlay:fullSearch()
     -- Search items
     -- Search enveloppes
 
+    local mc = MemCache.instance()
     local t1 = reaper.time_precise()
     local all_things = {}
     local proj              = reaper.EnumProjects(-1)
-    local proj_entry, _     = self:buildEditContextForThing(proj, "project", -1)
+    local proj_entry, _     = self:buildEditContextForThing(proj, -1)
     table.insert(all_things, proj_entry)
 
     -- Get total number of tracks
@@ -172,15 +161,15 @@ function QuickPreviewOverlay:fullSearch()
         local is_master         = (i==-1)
         local track             = is_master and reaper.GetMasterTrack(0) or reaper.GetTrack(0, i)
 
+        mc:getObjectCache(track)
         -- Track
-        local track_entry = self:buildEditContextForThing(track, "track", i)
-        table.insert(all_things, track_entry)
+        --table.insert(all_things, track_entry)
 
         -- Items
         local item_count = reaper.CountTrackMediaItems(track)
         for j = 0, item_count - 1 do
             local item = reaper.GetTrackMediaItem(track, j)
-            table.insert(all_things, self:buildEditContextForThing(item, "item", i))
+            mc:getObjectCache(item)
         end
 
         -- Envelopes
@@ -189,8 +178,8 @@ function QuickPreviewOverlay:fullSearch()
             local envelope = reaper.GetTrackEnvelope(track, ei)
             if not envelope then break end
 
-            local env_entry = self:buildEditContextForThing(envelope, "env", i)
-            table.insert(all_things, env_entry)
+            --table.insert(all_things, env_entry)
+            mc:getObjectCache(envelope)
 
             ei = ei + 1
         end
@@ -280,7 +269,7 @@ function QuickPreviewOverlay:updateVisibleThings()
 
                         pos_x_pixels, pos_y_pixels, len_x_pixels, len_y_pixels, clamped_left, clamped_right, clamped_top, clamped_bottom = block_clamp(pos_x_pixels, pos_y_pixels, len_x_pixels, len_y_pixels, tcp.w, tcp.h, 0, hlimit)
 
-                        local env_entry = self:buildEditContextForThing(envelope, "env", i, "tcp", pos_x_pixels, pos_y_pixels, len_x_pixels, len_y_pixels, clamped_left, clamped_right, clamped_top, clamped_bottom)
+                        local env_entry = self:buildEditContextForThing(envelope, i, "tcp", pos_x_pixels, pos_y_pixels, len_x_pixels, len_y_pixels, clamped_left, clamped_right, clamped_top, clamped_bottom)
 
                         table.insert(self.visible_things, env_entry)
                     end
@@ -300,7 +289,7 @@ function QuickPreviewOverlay:updateVisibleThings()
 
             pos_x_pixels, pos_y_pixels, len_x_pixels, len_y_pixels, clamped_left, clamped_right, clamped_top, clamped_bottom = block_clamp(pos_x_pixels, pos_y_pixels, len_x_pixels, len_y_pixels, tcp.w, tcp.h, 0, hlimit)
 
-            tcp_entry = self:buildEditContextForThing(track, "track", i, "tcp", pos_x_pixels, pos_y_pixels, len_x_pixels, len_y_pixels, clamped_left, clamped_right, clamped_top, clamped_bottom)
+            tcp_entry = self:buildEditContextForThing(track, i, "tcp", pos_x_pixels, pos_y_pixels, len_x_pixels, len_y_pixels, clamped_left, clamped_right, clamped_top, clamped_bottom)
 
             table.insert(self.visible_things, tcp_entry)
 
@@ -330,7 +319,7 @@ function QuickPreviewOverlay:updateVisibleThings()
 
                         pos_x_pixels, pos_y_pixels, len_x_pixels, len_y_pixels, clamped_left, clamped_right, clamped_top, clamped_bottom = block_clamp(pos_x_pixels, pos_y_pixels, len_x_pixels, len_y_pixels, avi.w, avi.h, 0, hlimit)
 
-                        table.insert(self.visible_things, self:buildEditContextForThing(item, "item", i, "arrange", pos_x_pixels, pos_y_pixels, len_x_pixels, len_y_pixels, clamped_left, clamped_right, clamped_top, clamped_bottom))
+                        table.insert(self.visible_things, self:buildEditContextForThing(item, i, "arrange", pos_x_pixels, pos_y_pixels, len_x_pixels, len_y_pixels, clamped_left, clamped_right, clamped_top, clamped_bottom))
                     end
                 end
             end
@@ -356,7 +345,7 @@ function QuickPreviewOverlay:updateVisibleThings()
             pos_x_pixels, pos_y_pixels, len_x_pixels, len_y_pixels, clamped_left, clamped_right, clamped_top, clamped_bottom = block_clamp(pos_x_pixels, pos_y_pixels, len_x_pixels, len_y_pixels, mcp.w, mcp.h, 0, 0)
 
             if pos_x_pixels >= 0 and len_x_pixels > 2 and pos_x_pixels + len_x_pixels <= mcp.w then
-                local mcp_entry = self:buildEditContextForThing(track, "track", i, "mcp", pos_x_pixels, pos_y_pixels, len_x_pixels, len_y_pixels, clamped_left, clamped_right, clamped_top, clamped_bottom)
+                local mcp_entry = self:buildEditContextForThing(track, i, "mcp", pos_x_pixels, pos_y_pixels, len_x_pixels, len_y_pixels, clamped_left, clamped_right, clamped_top, clamped_bottom)
                 table.insert(self.visible_things, mcp_entry)
                 if tcp_entry then
                     mcp_entry.tcp_entry = tcp_entry
@@ -372,7 +361,7 @@ function QuickPreviewOverlay:updateVisibleThings()
         local len_x_pixels = app_ctx.time_ruler.w
         local len_y_pixels = app_ctx.time_ruler.h
         local proj         = reaper.EnumProjects(-1)
-        local proj_entry, _ = self:buildEditContextForThing(proj, "project", -1, "time_ruler", 0, 0, len_x_pixels, len_y_pixels, false, false, false, false)
+        local proj_entry, _ = self:buildEditContextForThing(proj, -1, "time_ruler", 0, 0, len_x_pixels, len_y_pixels, false, false, false, false)
         table.insert(self.visible_things, proj_entry)
     end
 
@@ -389,7 +378,7 @@ function QuickPreviewOverlay:applySearch()
         self:applySearchToThing(thing)
     end
 
-    --self:fullSearch()
+   -- self:fullSearch()
 end
 
 
@@ -628,7 +617,7 @@ function QuickPreviewOverlay:drawTooltip()
         local slot_to_tooltip   = ((self.note_editor) and (self.note_editor.edited_slot)) or (pinned_thing and pinned_thing.capture_slot) or (thing_to_tooltip.hovered_slot)
         local tttext            = (slot_to_tooltip == -1) and (thing_to_tooltip.no_notes_message) or (thing_to_tooltip.notes:slotText(slot_to_tooltip))
         if tttext == "" or tttext == nil then
-            tttext = "`:grey:No " .. thing_to_tooltip.type .. " notes for the `_:grey:" .. D.SlotLabel(slot_to_tooltip):lower() .. "_ `:grey:category`"
+            tttext = "`:grey:No " .. thing_to_tooltip.cache.type .. " notes for the `_:grey:" .. D.SlotLabel(slot_to_tooltip):lower() .. "_ `:grey:category`"
         end
 
         local ttw, tth          = self:currentTooltipSizeForThing(thing_to_tooltip)
@@ -698,16 +687,10 @@ function QuickPreviewOverlay:drawTooltip()
                 self.tt_draw_count = -1
             end
 
-            -- Save new sizes to items/tracks when resized
             if self.note_editor and ((cur_w ~= ttw) or (cur_h ~= tth)) then
+                -- Save new sizes to items/tracks when resized
                 thing_to_tooltip.notes:setTooltipSize(self.note_editor.edited_slot, cur_w, cur_h)
                 thing_to_tooltip.notes:commit()
-
-                -- Alternate entry (tcp/mcp clone) should be refreshed
-                local alternate_entry = thing_to_tooltip.mcp_entry or thing_to_tooltip.tcp_entry
-                if alternate_entry then
-                    alternate_entry.notes:pull()
-                end
             end
 
             if ImGui.IsWindowFocused(ctx) and self.note_editor and not ImGui.IsMouseDown(ctx, ImGui.MouseButton_Left) then

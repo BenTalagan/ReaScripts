@@ -213,7 +213,6 @@ function OverlayCanvas:drawQuickSettings()
     ImGui.PopStyleVar(ctx, 2)
     ImGui.PopFont(ctx)
 
-
     -- LOGO LOGIC
     local align             = 320
     local remaining_space   = app_ctx.main_toolbar.w - align
@@ -344,7 +343,7 @@ function OverlayCanvas:drawVisibleThing(thing)
                         local no_notes_message = ""
 
                         if thing.notes:isBlank() then
-                            no_notes_message = "`:grey:No " .. thing.type .. " notes`"
+                            no_notes_message = "`:grey:No " .. thing.cache.type .. " notes`"
                         else
                             no_notes_message = "`:grey:All notes hidden`"
                         end
