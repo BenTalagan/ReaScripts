@@ -17,11 +17,6 @@ local D                 = require "modules/defines"
 local reaper_ext        = require "modules/reaper_ext"
 
 
-local OS                            = reaper.GetOS()
-local is_windows                    = OS:match('Win')
-local is_macos                      = OS:match('OSX') or OS:match('macOS')
-local is_linux                      = OS:match('Other')
-
 local function GetScreen(x, y)
     local scr = {}
     scr.l, scr.t, scr.r, scr.b = reaper.JS_Window_GetViewportFromRect(x, y, x, y, false)
@@ -87,7 +82,7 @@ end
 function QuickPreviewOverlay:IsInReaper()
     local app_ctx = AppContext.instance()
     local fg = reaper.JS_Window_GetForeground()
-    if is_macos then
+    if D.is_macos then
         return fg ~= nil
     else
         if fg == app_ctx.mv.hwnd then return true end
@@ -468,7 +463,7 @@ function QuickPreviewOverlay:ZOrderSwap()
             reaper.JS_Window_SetZOrder(canvas.hwnd, "INSERTAFTER", parent_hwnd)
             reaper.JS_Window_SetZOrder(parent_hwnd, "INSERTAFTER", canvas.hwnd)
 
-            if is_windows then
+            if D.is_windows then
                 reaper.JS_Window_SetForeground(canvas.hwnd)
             end
         end
@@ -502,7 +497,7 @@ function QuickPreviewOverlay:ensureZOrder()
         end
     else
         if self:IsInReaper() then
-            if is_windows and self.note_editor and self.note_editor.draw_count == 0 then
+            if D.is_windows and self.note_editor and self.note_editor.draw_count == 0 then
                 -- This is necessary under windows. The editor focus scrambles the
                 -- Floating mixer's z order.
                 self:ZOrderSwap()

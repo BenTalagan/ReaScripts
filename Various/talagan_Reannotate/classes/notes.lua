@@ -104,7 +104,7 @@ local function SetObjectNotes_Reannotate(object, data)
     local store_object  = StoreObject(object)
     local store_key     = StoreKey(object)
 
-    -- Clone the data before storing
+    -- Clone the data before storing, because there are objects here (stickers)
     local new_data          = {
         -- SWS/Reaper additional
         sws_reaper_tt_size  = data.sws_reaper_tt_size,
@@ -307,8 +307,6 @@ function Notes:setSlotText(slot, str)
     end
 end
 
--- Return stickers in the packed format.
--- Stickers should be unpacked.
 function Notes:slotStickers(slot)
     if slot == 0 then
         return self.reannotate_notes.sws_reaper_stickers or {}

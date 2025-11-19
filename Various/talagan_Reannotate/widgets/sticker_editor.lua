@@ -103,9 +103,13 @@ function StickerEditor:draw(color)
       ImGui.PushStyleColor(ctx, ImGui.Col_ChildBg, (self.sticker.icon.font_name == 'OpenMoji') and (0x9EB8FFFF) or (0))
     end
 
+
+---@diagnostic disable-next-line: undefined-field
     if ImGui.BeginChild(ctx, "Smiley prev", 50, 50, ImGui.ChildFlags_Borders, ImGui.WindowFlags_NoScrollbar) then
       if self.sticker and self.sticker.icon then
         local font = EmojImGui.Asset.Font(ctx, self.sticker.icon.font_name)
+
+---@diagnostic disable-next-line: redundant-parameter
         ImGui.PushFont(ctx, font, 28)
         local iw, ih = ImGui.CalcTextSize(ctx, self.sticker.icon.utf8)
         local cw, ch = ImGui.GetContentRegionAvail(ctx)

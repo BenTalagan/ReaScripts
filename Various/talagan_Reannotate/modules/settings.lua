@@ -3,9 +3,6 @@
 -- @license MIT
 -- @description This file is part of Reannotate
 
-local os                            = reaper.GetOS()
-local is_windows                    = os:match('Win')
-
 local SettingDefs = {
   UseDebugger               = { type = "bool",    default = false },
   UseProfiler               = { type = "bool",    default = false },

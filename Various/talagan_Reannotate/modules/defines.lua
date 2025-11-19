@@ -12,6 +12,16 @@ Defines.TT_DEFAULT_W = 300
 Defines.TT_DEFAULT_H = 100
 Defines.MAX_SLOTS    = 8 -- Slot 0 is counted
 
+local OS                            = reaper.GetOS()
+local is_windows                    = OS:match('Win')
+local is_macos                      = OS:match('OSX') or OS:match('macOS')
+local is_linux                      = OS:match('Other')
+
+Defines.OS              = OS
+Defines.is_windows      = is_windows
+Defines.is_macos        = is_macos
+Defines.is_linux        = is_linux
+
 Defines.POST_IT_COLORS = {
     0xFFFFFF, -- WHITE      Slot 0
     0x40acff, -- BLUE
