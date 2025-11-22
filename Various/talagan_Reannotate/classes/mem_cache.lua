@@ -21,40 +21,56 @@ function MemCache:_initialize()
   MemCache.__singleton = self
 end
 
-function MemCache:getObjectCache(object)
+function MemCache.GetObjectGUID(object)
   local guid = ''
-  local name = ''
-  local type = ''
   if reaper.ValidatePtr(object, "MediaTrack*") then
     local tguid = reaper.GetTrackGUID(object)
-    local _, tname = reaper.GetTrackName(object)
     guid = tguid
-    name = tname
-    type = 'track'
   elseif reaper.ValidatePtr(object,"MediaItem*") then
     local _, tguid = reaper.GetSetMediaItemInfo_String(object, "GUID", "", false)
-    local take = reaper.GetActiveTake(object)
-    if take then
-      name = reaper.GetTakeName(take)
-    end
     guid = tguid
-    type = 'item'
   elseif reaper.ValidatePtr(object, "TrackEnvelope*") then
     local _, tguid = reaper.GetSetEnvelopeInfo_String(object, "GUID", "", false)
-    local _, ename = reaper.GetEnvelopeName(object)
     guid = tguid
-    name = ename
-    type = 'env'
   elseif reaper.ValidatePtr(object, "ReaProject*") then
     local _, tguid = reaper.GetSetProjectInfo_String(object, "PROJECT_NAME", "", false)
     guid = tguid
-    name = "Project"
-    type = 'project'
   else
     error("Unhandled type for object")
   end
+  return guid
+end
+
+function MemCache:getObjectCache(object)
+
+  local guid = MemCache.GetObjectGUID(object)
 
   if not self._repo[guid] then
+    -- Build object cache
+
+    local name = ''
+    local type = ''
+    if reaper.ValidatePtr(object, "MediaTrack*") then
+      local _, tname = reaper.GetTrackName(object)
+      name = tname
+      type = 'track'
+    elseif reaper.ValidatePtr(object,"MediaItem*") then
+      local take = reaper.GetActiveTake(object)
+      if take then
+        name = reaper.GetTakeName(take)
+      end
+      type = 'item'
+    elseif reaper.ValidatePtr(object, "TrackEnvelope*") then
+      local _, ename = reaper.GetEnvelopeName(object)
+      name = ename
+      type = 'env'
+    elseif reaper.ValidatePtr(object, "ReaProject*") then
+      name = "Project"
+      type = 'project'
+    else
+      error("Unhandled type for object")
+    end
+
     -- Cache miss, pull info from object
     self._repo[guid] = {
       guid    = guid,

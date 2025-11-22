@@ -140,51 +140,80 @@ function QuickPreviewOverlay:buildEditContextForThing(object, track_num, parent_
     }
 end
 
-function QuickPreviewOverlay:fullSearch()
+function QuickPreviewOverlay:applyFullSearch()
     -- Search project
     -- Search tracks
     -- Search items
     -- Search enveloppes
 
-    local mc = MemCache.instance()
-    local t1 = reaper.time_precise()
-    local all_things = {}
+    -- Iterate over all objets, create object cache fore each one if needed, and finally apply search to each object
+    -- Caching accelerates drastically the process.
+
+    local app_context = AppContext.instance()
+    local mc          = MemCache.instance()
+    local t1          = reaper.time_precise()
+
+    app_context.search_result = {
+        matching_entries = {},
+        counts = {
+            projects    = 0,
+            tracks      = 0,
+            envelopes   = 0,
+            items       = 0
+        },
+        last_search = self.filter_str
+    }
+
+    if self.filter_str == '' or self.filter_str == nil then
+        -- Filtering of visible things is already made, don't spend time
+        -- To keep everyone
+        return
+    end
+
+    local matching_entries = app_context.search_result.matching_entries
+    local counts           = app_context.search_result.counts
+
+    local _search_object    = function(object, count_type)
+        local cache             = mc:getObjectCache(object)
+        local match_count       = self:applySearchToCache(cache)
+        if match_count > 0 then
+            matching_entries[#matching_entries+1] = cache
+            counts[count_type] = counts[count_type] + 1
+        end
+    end
+
+    -- Project
     local proj              = reaper.EnumProjects(-1)
-    local proj_entry, _     = self:buildEditContextForThing(proj, -1)
-    table.insert(all_things, proj_entry)
+    _search_object(proj, "projects")
 
     -- Get total number of tracks
     local track_count = reaper.CountTracks(0)
 
     -- Iterate through tracks
     for i = -1, track_count - 1 do
-        local is_master         = (i==-1)
-        local track             = is_master and reaper.GetMasterTrack(0) or reaper.GetTrack(0, i)
+        local track             =  (i==-1) and reaper.GetMasterTrack(0) or reaper.GetTrack(0, i)
 
-        mc:getObjectCache(track)
         -- Track
-        --table.insert(all_things, track_entry)
+        _search_object(track, "tracks")
 
         -- Items
         local item_count = reaper.CountTrackMediaItems(track)
         for j = 0, item_count - 1 do
-            local item = reaper.GetTrackMediaItem(track, j)
-            mc:getObjectCache(item)
+            local item  = reaper.GetTrackMediaItem(track, j)
+            _search_object(item, "items")
         end
 
         -- Envelopes
-        local ei                = 0
+        local ei = 0
         while true do
             local envelope = reaper.GetTrackEnvelope(track, ei)
             if not envelope then break end
 
-            --table.insert(all_things, env_entry)
-            mc:getObjectCache(envelope)
-
+            _search_object(envelope, "envelopes")
             ei = ei + 1
         end
     end
-    reaper.ShowConsoleMsg("" .. #all_things .. " " .. reaper.time_precise() - t1 .. "\n")
+    --reaper.ShowConsoleMsg(#matching_entries .. " " .. reaper.time_precise() - t1 .. "\n")
 end
 
 function QuickPreviewOverlay:updateVisibleThings()
@@ -373,17 +402,19 @@ function QuickPreviewOverlay:title()
     return "Reannotate Quick Preview"
 end
 
-function QuickPreviewOverlay:applySearch()
+function QuickPreviewOverlay:applySearch(do_full_search)
     for _, thing in ipairs(self.visible_things) do
         self:applySearchToThing(thing)
     end
 
-   -- self:fullSearch()
+    if do_full_search then
+        self:applyFullSearch()
+    end
 end
 
 
-function QuickPreviewOverlay:applySearchToThing(thing)
-    thing.search_results    = {}
+function QuickPreviewOverlay:applySearchToCache(cache)
+    cache.search_results    = {}
 
     local case_sensitive = false
     local search_str     = self.filter_str
@@ -392,20 +423,32 @@ function QuickPreviewOverlay:applySearchToThing(thing)
         search_str = search_str:lower()
     end
 
+    local match_count = 0
     for i=0, D.MAX_SLOTS - 1 do
         local slot      = i
-        local slotNotes = thing.notes:slotText(slot)
+        local slotNotes = cache.notes:slotText(slot)
 
         if not case_sensitive then
             slotNotes = slotNotes:lower()
         end
 
+        local slot_matches = false
         if self.filter_str == '' then
-            thing.search_results[slot+1] = true
+            slot_matches = true
         else
-            thing.search_results[slot+1] = slotNotes:match(search_str)
+            slot_matches = slotNotes:match(search_str)
         end
+        cache.search_results[slot+1] = slot_matches
+        if slot_matches then match_count = match_count + 1 end
     end
+
+    cache.search_match_count = match_count
+
+    return match_count
+end
+
+function QuickPreviewOverlay:applySearchToThing(thing)
+    return self:applySearchToCache(thing.cache)
 end
 
 function QuickPreviewOverlay:minimizeTopWindowsAtLaunch()
@@ -616,8 +659,10 @@ function QuickPreviewOverlay:drawTooltip()
 
         local slot_to_tooltip   = ((self.note_editor) and (self.note_editor.edited_slot)) or (pinned_thing and pinned_thing.capture_slot) or (thing_to_tooltip.hovered_slot)
         local tttext            = (slot_to_tooltip == -1) and (thing_to_tooltip.no_notes_message) or (thing_to_tooltip.notes:slotText(slot_to_tooltip))
+        local tooltip_is_empty  = (slot_to_tooltip == -1)
         if tttext == "" or tttext == nil then
             tttext = "`:grey:No " .. thing_to_tooltip.cache.type .. " notes for the `_:grey:" .. D.SlotLabel(slot_to_tooltip):lower() .. "_ `:grey:category`"
+            tooltip_is_empty = true
         end
 
         local ttw, tth          = self:currentTooltipSizeForThing(thing_to_tooltip)
@@ -641,12 +686,21 @@ function QuickPreviewOverlay:drawTooltip()
             self.rand = math.random()
         end
 
+        if self.tt_draw_count == 1 and tooltip_is_empty then
+            -- Auto resize "empty" tooltips. This glitches during 1 frame...
+            local target_h = self.mdwidget.max_y + 20
+            local target_w = self.mdwidget.max_x + 20
+           -- ImGui.SetNextWindowSize(ctx, target_w, target_h)
+        end
+
         self.mdwidget:setText(tttext)
 
         ImGui.SetNextWindowBgAlpha(ctx, 1)
         ImGui.SetNextWindowPos(ctx, tt_pos.x, tt_pos.y)
 
-        if ImGui.Begin(ctx, "Reannotate Notes (Tooltip)##" .. self.rand, true, ImGui.WindowFlags_NoFocusOnAppearing | ImGui.WindowFlags_NoTitleBar | ImGui.WindowFlags_TopMost | ImGui.WindowFlags_NoSavedSettings | ImGui.WindowFlags_NoScrollbar) then
+        local tooltip_flags = ImGui.WindowFlags_NoFocusOnAppearing | ImGui.WindowFlags_NoTitleBar | ImGui.WindowFlags_TopMost | ImGui.WindowFlags_NoSavedSettings | ImGui.WindowFlags_NoScrollbar
+
+        if ImGui.Begin(ctx, "Reannotate Notes (Tooltip)##" .. self.rand, true, tooltip_flags) then
             local cur_x, cur_y  = ImGui.GetWindowPos(ctx)
             local cur_w, cur_h  = ImGui.GetWindowSize(ctx)
             local draw_list     = ImGui.GetWindowDrawList(ctx)
@@ -783,7 +837,7 @@ function QuickPreviewOverlay:draw()
 
         self.note_editor.slot_commit_callback = function()
             -- Content has changed, need to update the current search
-            self:applySearch()
+            self:applySearch(true)
         end
     end
 

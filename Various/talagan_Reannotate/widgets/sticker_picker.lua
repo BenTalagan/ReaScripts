@@ -95,11 +95,19 @@ function StickerPicker:renderStickerZone(ctx, stickers, should_go_to_line)
         clicked = sticker
       end
       if ImGui.BeginTooltip(ctx) then
+        if sticker:isSpecial() then
+          if sticker.text == 'checkboxes' then
+            ImGui.Text(ctx, "Special sticker that shows the number of checked\nchecbkoxes and the total of checbkoxes in this note")
+          end
+          if sticker.text == 'category' then
+            ImGui.Text(ctx, "Special sticker that shows the note's category\n(will change if the categories are edited)")
+          end
+        end
         ImGui.TextColored(ctx, 0xCC96FFFF, "Click"); ImGui.SameLine(ctx,0,5); ImGui.Text(ctx, "to pick")
         if not sticker:isSpecial() then
           ImGui.TextColored(ctx, 0xCC96FFFF, "Right click"); ImGui.SameLine(ctx,0,5); ImGui.Text(ctx, "to edit")
+          ImGui.TextColored(ctx, 0xCC96FFFF, "Ctrl+click "); ImGui.SameLine(ctx,0,5); ImGui.Text(ctx, "to remove from library")
         end
-        ImGui.TextColored(ctx, 0xCC96FFFF, "Ctrl+click "); ImGui.SameLine(ctx,0,5); ImGui.Text(ctx, "to remove from library")
         ImGui.EndTooltip(ctx)
       end
     end

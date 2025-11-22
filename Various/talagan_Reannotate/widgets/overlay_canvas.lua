@@ -186,7 +186,7 @@ function OverlayCanvas:drawQuickSettings()
     local b, v = ImGui.InputTextWithHint(ctx, "##search_input", "Terms...", self.parent_overlay.filter_str,  ImGui.InputTextFlags_NoHorizontalScroll | ImGui.InputTextFlags_AutoSelectAll | ImGui.InputTextFlags_ParseEmptyRefVal )
     if b then
         self.parent_overlay.filter_str = v
-        self.parent_overlay:applySearch()
+        self.parent_overlay:applySearch(true)
     end
     ImGui.PopStyleVar(ctx)
 
@@ -271,7 +271,7 @@ function OverlayCanvas:drawVisibleThing(thing)
     for i=0, D.MAX_SLOTS - 1 do
         local is_slot_blank                 = thing.notes:isSlotBlank(i)
         local is_slot_enabled               = app_ctx.enabled_category_filters[i + 1]
-        local the_slot_matches_the_search   = (thing.search_results[i + 1])
+        local the_slot_matches_the_search   = (thing.cache.search_results[i + 1])
         if (not is_slot_blank) and is_slot_enabled and the_slot_matches_the_search then
             divisions         = divisions + 1
             has_notes_to_show = true
@@ -300,7 +300,7 @@ function OverlayCanvas:drawVisibleThing(thing)
         local slot              = (i==D.MAX_SLOTS - 1) and (0) or (i+1)
         local is_slot_enabled   = (is_no_note_slot or app_ctx.enabled_category_filters[slot + 1])
 
-        local the_slot_matches_the_search  = (thing.search_results[slot+1])
+        local the_slot_matches_the_search  = (thing.cache.search_results[slot+1])
 
         -- The empty slot is always visible
         local is_slot_visible   = (is_no_note_slot) or (not thing.notes:isSlotBlank(slot) and is_slot_enabled and the_slot_matches_the_search)
