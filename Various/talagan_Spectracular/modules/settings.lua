@@ -21,7 +21,8 @@ local SettingDefs = {
   RMSWindow           = { type = "int",     default = 1024},
   KeepTimeSelection   = { type = "bool",    default = false },
   KeepTrackSelection  = { type = "bool",    default = false },
-  AutoRefresh         = { type = "bool",    default = false}
+  AutoRefresh         = { type = "bool",    default = false},
+  Reassignment        = { type = "bool",    default = false}
 };
 
 local function unsafestr(str)
@@ -118,7 +119,8 @@ local instance_params = {
   time_resolution_ms  = getSetting("TimeResolution"),
   fft_size            = getSetting("FFTSize"),
   rms_window          = getSetting("RMSWindow"),
-  auto_refresh        = getSetting("AutoRefresh")
+  auto_refresh        = getSetting("AutoRefresh"),
+  reassignment        = getSetting("Reassignment")
 }
 
 return {
@@ -132,4 +134,3 @@ return {
 
   instance_params             = instance_params
 }
-

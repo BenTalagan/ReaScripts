@@ -41,7 +41,9 @@ local function build_spectrum_context()
         time_resolution_ms    = S.instance_params.time_resolution_ms,
         fft_size              = S.instance_params.fft_size,
         rms_window            = S.instance_params.rms_window,
-        zero_padding_percent  = S.instance_params.zero_padding_percent
+        zero_padding_percent  = S.instance_params.zero_padding_percent,
+        reassignment          = S.instance_params.reassignment,
+        dbmin                 = S.instance_params.dbmin
     }
 
     if S.instance_params.keep_time_selection and spectrum_context then
@@ -200,6 +202,18 @@ local function refreshOptionsWidgets(ctx)
     end
     TT(ctx, "If this option is on, this Spectracular window will watch for changes\n\z
              happening in the currently edited MIDI take and auto-refresh.")
+
+    SL(ctx)
+
+    local v, b = ImGui.Checkbox(ctx, "Reassignment", S.instance_params.reassignment)
+    if v then
+        S.instance_params.reassignment = b
+        S.setSetting("Reassignment", b)
+        want_refresh = true
+    end
+    TT(ctx, "Spectral reassignment : sharpens the spectrogram by relocating each bin's energy\n\z
+             to its instantaneous frequency instead of the nominal bin frequency.\n\z
+             Costs ~2x more computation. Triggers a full reanalysis when toggled.")
 end
 
 local function drawBottomSettings(ctx)

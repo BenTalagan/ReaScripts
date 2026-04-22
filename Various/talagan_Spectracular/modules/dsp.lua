@@ -177,24 +177,45 @@ end
 local WINDOW_HANN = 0;
 local WINDOW_RECT = 1;
 
--- Beware, this function modifies the input samples.
+-- Apply a window to the samples, and put the result into x1. If want_reassign, also calculates additional results in x2 and x3.
 -- Window start is an index given in the samples_array, so it uses lua index norm (which is +1, that's why we remove 1 before going EEL)
-local function sig_window(window_type, samples_array, window_start, window_size)
+-- Beware the window size may be different from the sample array size. This is because the samples may be zero padded
+-- Due to forced zero-padding, or border clamping if we're on the start or the end of the analysis.
+-- The window size should actually match the real number of samples in the buffer.
+local function sig_window(samples_array, window_type, window_start, window_size, want_reassign, x1_array, x2_array, x3_array)
 
-    -- TODO : Check window size and window start coherency
+    assert(window_size <= #samples_array, "Window size should be equal or smaller to the sample array")
+    assert(#x1_array == #samples_array, "Output X1 should be of same size as the input")
+    assert(#x2_array == #samples_array, "Output X2 should be of same size as the input")
+    assert(#x3_array == #samples_array, "Output X3 should be of same size as the input")
+
     local func = getOrCompileFunction("fft_window")
 
     ImGui.Function_SetValue(func, "_WINDOW_TYPE",      window_type)
     ImGui.Function_SetValue(func, "_WINDOW_START",     window_start - 1)
     ImGui.Function_SetValue(func, "_WINDOW_SIZE",      window_size)
+    ImGui.Function_SetValue(func, "_WANT_REASSIGN",    want_reassign and 1 or 0)
     ImGui.Function_SetValue(func, "_SIZE",             #samples_array)
+
+    local m = Malloc:new()
 
     -- Hann coeffs are mapped first, then the samples,
     -- so put all samples after the coeffs.
-    Function_SetValue_ArrayAt(func, "_SAMPLES",        samples_array, window_size)
+    m:alloc(window_size) -- Hann coefficients
+    m:alloc(window_size) -- Hann derivative coefficients
+    Function_SetValue_ArrayAt(func, "_SAMPLES",        samples_array, m:alloc(#samples_array))
+
+    ImGui.Function_SetValue(func, "_X1", m:alloc(#samples_array))
+    ImGui.Function_SetValue(func, "_X2", m:alloc(#samples_array))
+    ImGui.Function_SetValue(func, "_X3", m:alloc(#samples_array))
 
     ImGui.Function_Execute(func)
-    ImGui.Function_GetValue_Array(func, "_SAMPLES",    samples_array)
+
+    ImGui.Function_GetValue_Array(func, "_X1", x1_array)
+    if want_reassign then
+        ImGui.Function_GetValue_Array(func, "_X2", x2_array)
+        ImGui.Function_GetValue_Array(func, "_X3", x3_array)
+    end
 
     local sig_energy    = ImGui.Function_GetValue(func, "_ENERGY")
     local max_energy    = ImGui.Function_GetValue(func, "_MAX_ENERGY")
@@ -202,11 +223,11 @@ local function sig_window(window_type, samples_array, window_start, window_size)
     return sig_energy, max_energy
 end
 
-local function window_hann(samples_array, window_start, window_size)
-    return sig_window(WINDOW_HANN, samples_array, window_start, window_size)
+local function window_hann(samples_array, window_start, window_size, want_reassign, x1_array, x2_array, x3_array)
+    return sig_window(samples_array, WINDOW_HANN, window_start, window_size, want_reassign, x1_array, x2_array, x3_array)
 end
-local function window_rect(samples_array, window_start, window_size)
-    return sig_window(WINDOW_RECT, samples_array, window_start, window_size)
+local function window_rect(samples_array, window_start, window_size, want_reassign, x1_array, x2_array, x3_array)
+    return sig_window(samples_array, WINDOW_RECT, window_start, window_size, want_reassign, x1_array, x2_array, x3_array)
 end
 
 -------------------
@@ -481,6 +502,99 @@ local function analysis_data_extract_profile(data_buf, profile_buf, slice_count,
     analysis_data_extract(EXTRACT_PROFILE, data_buf, profile_buf, slice_count, slice_size, profile_num)
 end
 
+local REASSIGN_OP_INIT           = 0
+local REASSIGN_OP_PROCESS        = 1
+local REASSIGN_OP_ADVANCE        = 2
+
+-- Initialize the rolling reassignment buffer.
+-- Must be called once (per channel) before any push/flush calls.
+local function fft_reassign_rolling_init(chan_count, rolling_width, bin_count, bin_fwidth, sample_rate, slice_step_s, window_full_size, window_effective_size)
+    local func = getOrCompileFunction("fft_reassign_rolling")
+
+    -- Useful vars
+    ImGui.Function_SetValue(func, "_OP",                    REASSIGN_OP_INIT)
+    ImGui.Function_SetValue(func, "_W",                     rolling_width)
+    ImGui.Function_SetValue(func, "_CHAN_COUNT",            chan_count)
+    ImGui.Function_SetValue(func, "_BIN_COUNT",             bin_count)
+    ImGui.Function_SetValue(func, "_BIN_FWIDTH",            bin_fwidth)
+    ImGui.Function_SetValue(func, "_SAMPLE_RATE",           sample_rate)
+    ImGui.Function_SetValue(func, "_SLICE_STEP_S",          slice_step_s)
+    ImGui.Function_SetValue(func, "_WINDOW_FULL_SIZE",      window_full_size)
+    ImGui.Function_SetValue(func, "_WINDOW_EFFECTIVE_SIZE", window_effective_size)
+
+    -- Outputs
+    ImGui.Function_SetValue(func, "_COMMITTED",          0)
+    ImGui.Function_SetValue(func, "_OUT_MAG_REASSIGNED", 0)
+
+    local m         = Malloc:new()
+
+    -- This is the array memory map of the function, with all pointer adresses
+    ImGui.Function_SetValue(func, "RING_BIN_MAG_REASSIGNED",    m:alloc(chan_count * bin_count * rolling_width ))
+    ImGui.Function_SetValue(func, "_IN_FFT_X1",                 m:alloc(chan_count * 2 * bin_count))
+    ImGui.Function_SetValue(func, "_IN_FFT_X2",                 m:alloc(chan_count * 2 * bin_count))
+    ImGui.Function_SetValue(func, "_IN_FFT_X3",                 m:alloc(chan_count * 2 * bin_count))
+    ImGui.Function_SetValue(func, "_IN_MAG_BASE",               m:alloc(chan_count * bin_count))
+
+    ImGui.Function_Execute(func)
+end
+
+-- Pushes some data into the temp processing buffers.
+-- Private, not exposed, reused by public functions.
+local function _fft_reassign_feed(start_address_var, buf, component_count)
+    local func      = getOrCompileFunction("fft_reassign_rolling")
+
+    local bin_count     = ImGui.Function_GetValue(func, "_BIN_COUNT")
+    local comp_count    = component_count * bin_count
+
+    assert(#buf == comp_count, "Trying to copy buffer into memory with wrong size !")
+
+    -- Set ptr position for the copy in memory space
+    ImGui.Function_SetValue_Array(func, start_address_var, buf)
+end
+
+local function fft_reassign_feed_x1_fft(buf)
+    _fft_reassign_feed("_IN_FFT_X1", buf, 2) -- Re + Im, components per slice for one FFT
+end
+local function fft_reassign_feed_x2_fft(buf)
+    _fft_reassign_feed("_IN_FFT_X2", buf, 2) -- Re + Im, components per slice for one FFT
+end
+local function fft_reassign_feed_x3_fft(buf)
+    _fft_reassign_feed("_IN_FFT_X3", buf, 2) -- Re + Im, components per slice for one FFT
+end
+local function fft_reassign_feed_base_mag(buf)
+    _fft_reassign_feed("_IN_MAG_BASE", buf, 1) -- Only bins
+end
+
+-- Processes the temp buffers, and reassign energy into the rolling accumulator
+-- Should specify the current chan that is processed.
+local function fft_reassign_process_current_for_chan(chan, max_energy)
+    local func      = getOrCompileFunction("fft_reassign_rolling")
+    ImGui.Function_SetValue(func, "_OP",        REASSIGN_OP_PROCESS)
+    ImGui.Function_SetValue(func, "_IN_CHAN",   chan)
+    ImGui.Function_SetValue(func, "_MAX_ENERGY", max_energy)
+    ImGui.Function_Execute(func)
+end
+
+local function fft_reassign_read_ring_slice_for_chan(chan, ring_slice_num, out_buf)
+    local func          = getOrCompileFunction("fft_reassign_rolling")
+    local bin_count     = ImGui.Function_GetValue(func, "_BIN_COUNT")
+    local ring_addr     = ImGui.Function_GetValue(func, "RING_BIN_MAG_REASSIGNED")
+    local roll_width    = ImGui.Function_GetValue(func, "_W")
+
+    assert(#out_buf == bin_count, "Trying to copy buffer into memory with wrong size !")
+
+    ImGui.Function_SetValue(func, "_DST_CPY_ADDR", ring_addr + (chan * roll_width + ring_slice_num) * bin_count  )
+    ImGui.Function_GetValue_Array(func, "_DST_CPY_ADDR", out_buf)
+end
+
+-- Advances the HEAD. Zeroifies the slice that is going out of the buffer.
+local function fft_reassign_advance()
+    local func      = getOrCompileFunction("fft_reassign_rolling")
+    ImGui.Function_SetValue(func, "_OP", REASSIGN_OP_ADVANCE)
+    ImGui.Function_Execute(func)
+end
+
+
 local function analysis_data_to_rgb_array(spectrograms, coeffs, rgb_result, db_min, db_max, slice_size, format)
     local func = getOrCompileFunction("analysis_data_to_rgb_array")
 
@@ -554,5 +668,16 @@ return {
 
     analysis_data_to_rgb_array      = analysis_data_to_rgb_array,
     analysis_data_extract_profile   = analysis_data_extract_profile,
-    analysis_data_extract_slice     = analysis_data_extract_slice
+    analysis_data_extract_slice     = analysis_data_extract_slice,
+
+    fft_reassign_rolling_init               = fft_reassign_rolling_init,
+    fft_reassign_feed_x1_fft                = fft_reassign_feed_x1_fft,
+    fft_reassign_feed_x2_fft                = fft_reassign_feed_x2_fft,
+    fft_reassign_feed_x3_fft                = fft_reassign_feed_x3_fft,
+    fft_reassign_feed_base_mag              = fft_reassign_feed_base_mag,
+
+    fft_reassign_process_current_for_chan   = fft_reassign_process_current_for_chan,
+    fft_reassign_advance                    = fft_reassign_advance,
+
+    fft_reassign_read_ring_slice_for_chan   = fft_reassign_read_ring_slice_for_chan
 }

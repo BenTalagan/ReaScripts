@@ -97,6 +97,7 @@ end
 --- For the following function, indices are zero-based
 --- @param dst reaper.array
 function SampleAccessor:getSamples(sample_num, sample_count, chan_num, dst, dst_offset)
+
     if sample_num < self.sample_offset then
         error("Developer error, trying to read before the accessor's beginning")
     end

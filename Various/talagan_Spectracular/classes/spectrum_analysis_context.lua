@@ -95,6 +95,11 @@ function SpectrumAnalysisContext:_buildAndRender()
     -- Build result data buffers
     self:_buildSpectrogramBuffers()
 
+    -- Initialize reassignment rolling buffers
+    if self.params.reassignment then
+        self:_reinitReassignmentBuffers()
+    end
+
     self.sample_accessor        = SampleAccessor:new(self)
 end
 
@@ -133,17 +138,26 @@ function SpectrumAnalysisContext:_buildFFTParamsAndBuffers()
     -- Bandwidth of an FFT bin
     local bin_fwidth        = samplerate / sample_count
 
-    -- Pre-allocate some buffers
+    -- Pre-allocate working buffers
     local sample_buf            = reaper.new_array(sample_count)
+
+    local x1_buf                = reaper.new_array(sample_count)
+    local x2_buf                = reaper.new_array(sample_count) -- used for reassignment
+    local x3_buf                = reaper.new_array(sample_count) -- used for reassignment
+
     local fft_bin_buf           = reaper.new_array(bin_count)
     local bin_freq_buf          = reaper.new_array(bin_count)
 
-    -- There's not the same number of bins in the low octavas and in the high octava, due to the logarithmic nature of the freq/note scale
-    -- The resolution is better in low frequencies, and there will be more bins there.
+    -- Fill the bin freqs with the corresponding frequencies
     DSP.array_fill_bin_freqs(bin_freq_buf, bin_fwidth)
 
     return {
-        buf                             = sample_buf,
+        sample_buf                      = sample_buf,
+
+        x1_buf                          = x1_buf,
+        x2_buf                          = x2_buf,
+        x3_buf                          = x3_buf,
+
         -- Buffer for all bin energies
         fft_bin_buf                     = fft_bin_buf,
         -- Buffer for all central frequencies of bins
@@ -159,7 +173,7 @@ function SpectrumAnalysisContext:_buildFFTParamsAndBuffers()
         effective_window_sample_count   = effective_window_sample_count,
         effective_window_duration       = effective_window_sample_count / samplerate,
 
-        -- indication for the zero-padding
+         -- indication for the zero-padding
         padding_size                    = sample_count - effective_window_sample_count,
     }
 end
@@ -196,9 +210,26 @@ function SpectrumAnalysisContext:_buildSpectrogramBuffers()
     self.rmse         = {}
 
     for ci=1, self.chan_count do
-        -- Build spectrogram and rmse for each channel
-        self.spectrograms[ci]    = Spectrogram:new(self, ci)
-        self.rmse[ci]            = reaper.new_array(self.slice_count)
+        self.spectrograms[ci] = Spectrogram:new(self, ci)
+        self.rmse[ci]         = reaper.new_array(self.slice_count)
+    end
+end
+
+function SpectrumAnalysisContext:_reinitReassignmentBuffers()
+
+    -- TODO : may use something something dynamic
+    self.reassign_roll_window          = 33
+    self.reassign_roll_half_window     = math.floor(self.reassign_roll_window * 0.5)
+
+    DSP.fft_reassign_rolling_init(self.chan_count, self.reassign_roll_window, self.fft_params.bin_count, self.fft_params.bin_fwidth, self.sample_rate, self.slice_step_duration, self.fft_params.full_window_sample_count, self.fft_params.effective_window_sample_count )
+
+    -- Scalar rings for per-slice normalisation params (size W, indexed by si % W)
+    self.reassign_ring_applied_window = {}
+    self.reassign_ring_max_energy     = {}
+
+    for i = 1, self.reassign_roll_window do
+        self.reassign_ring_applied_window[i] = 1
+        self.reassign_ring_max_energy[i]     = 1
     end
 end
 
@@ -206,32 +237,97 @@ function SpectrumAnalysisContext:resumeAnalysis()
 
     self.analysis_chunk_start = reaper.time_precise()
 
+    -- This may be resumed, so remember that progress.si may not be at 0 when entering the function
     while self.progress.si < self.slice_count do
+
         -- Get the center of our slice : add one semi-slice
+        -- The frame offset is the index of the first sample of the window / slices we're going to analyse
         local frame_offset = math.floor( (0.5 + self.progress.si) * self.slice_step )
+        local ring_head    = 0
+
+        if self.params.reassignment then
+            -- We use a rolling buffer with rolling width slots
+            -- The head is the current data push / analysis slot
+            ring_head = self.progress.si % self.reassign_roll_window
+        end
 
         for ci=1, self.chan_count do
 
-            -- Read samples, put in buffer, apply hann window
-            self:_prepareFFT(ci, frame_offset)
-            -- Do the fft, energy processing, and store data
-            self:_performFFT()
-            -- Normalize the result
-            self:_normalizeFFT()
-            -- Interpolate for notes instead of frequencies
-            DSP.resample_curve(self.fft_params.bin_freq_buf, self.fft_params.fft_bin_buf, self.note_freq_buf, self.note_freq_energy_buf, false, "akima")
+            if self.params.reassignment then
+                -- Reassignment pipeline
+                -- Step 1 : main FFT
+                self:_prepareAndPerformFFT(ci, frame_offset, true)
+                -- Normalize the result
 
-            -- Copy into slices the content of the new energies for this slice, at the offset of the slice
-            self.spectrograms[ci]:saveSlice(self.note_freq_energy_buf, self.progress.si)
-            -- Calculate the RMSE for this slice
+                -- Store per-slice normalisation params in scalar rings; beware of lua indices
+                self.reassign_ring_applied_window[ring_head+1] = self.fft_params.applied_window_sample_count
+                self.reassign_ring_max_energy[ring_head+1]     = self.fft_params.max_energy
+
+                -- Feed the function with FFT results
+                DSP.fft_reassign_feed_x1_fft(self.fft_params.x1_buf)
+                DSP.fft_reassign_feed_x2_fft(self.fft_params.x2_buf)
+                DSP.fft_reassign_feed_x3_fft(self.fft_params.x3_buf)
+
+                -- Feed the function with FFT bins
+                DSP.fft_reassign_feed_base_mag(self.fft_params.fft_bin_buf)
+
+                -- Step 3 : Now, FFT, shifted FFT and main BINs are all pushed into the temp buffers
+                -- Apply reassignment into accumulation buffers
+                DSP.fft_reassign_process_current_for_chan(ci-1, self.fft_params.max_energy) -- Beware lua index !
+
+            else
+                -- Normal pipeline
+                self:_prepareAndPerformFFT(ci, frame_offset, true)
+                -- Normalize the result
+                self:_normalizeFFT()
+                -- Interpolate for notes instead of frequencies
+                DSP.resample_curve(self.fft_params.bin_freq_buf, self.fft_params.fft_bin_buf, self.note_freq_buf, self.note_freq_energy_buf, false, "akima")
+                -- Copy into slices the content of the new energies for this slice, at the offset of the slice
+                self.spectrograms[ci]:saveSlice(self.note_freq_energy_buf, self.progress.si)
+            end
+
+            -- RMSE (uses its own sample window, independent of FFT)
             self.rmse[ci][self.progress.si + 1] = self:_performRMSE(ci, frame_offset)
         end
 
-        self.progress.si    = self.progress.si + 1
+        if self.params.reassignment then
+            local outed_slice = self.progress.si - self.reassign_roll_half_window
+            if outed_slice >= 0 then
+                local ring_trail = ring_head - self.reassign_roll_half_window
+                if (ring_trail < 0) then ring_trail = ring_trail + self.reassign_roll_window end
+
+                for ci=1, self.chan_count do
+                    self:_bakeReassignedSlice(ci-1, outed_slice, ring_trail)
+                end
+            end
+
+            -- Now advance and zero outed slice
+            DSP.fft_reassign_advance()
+        end
+
+        self.progress.si = self.progress.si + 1
 
         if (reaper.time_precise() - self.analysis_chunk_start) > UI_REFRESH_INTERVAL_SECONDS then
             -- Interrupt the calculation to let reaper do other stuff
             return false
+        end
+    end
+
+    -- Flush phase : drain remaining HALF_W slices from rolling buffer
+    if self.params.reassignment then
+        local flushi = 0
+        while flushi < self.reassign_roll_half_window do
+            local slice_i       = self.slice_count + flushi -- This is beyond the last slice but it's ok
+            local ring_head     = slice_i % self.reassign_roll_window
+            local outed_slice   = slice_i - self.reassign_roll_half_window
+            local ring_trail    = ring_head - self.reassign_roll_half_window
+            if (ring_trail < 0) then ring_trail = ring_trail + self.reassign_roll_window end
+
+            for ci=1, self.chan_count do
+                self:_bakeReassignedSlice(ci-1, outed_slice, ring_trail)
+            end
+
+            flushi = flushi + 1
         end
     end
 
@@ -248,14 +344,37 @@ function SpectrumAnalysisContext:resumeAnalysis()
 end
 
 
+
+-- Convert committed bin magnitudes to dB, resample to note grid, and save into spectrograms.
+-- applied_window and max_energy are the per-slice normalisation params stored in the scalar rings.
+-- All indices are 0 based.
+function SpectrumAnalysisContext:_bakeReassignedSlice(chan, outed_slice, outed_ring_index)
+    local fft_params = self.fft_params
+
+    -- Beware of lua indices for the ring buffers
+    local full_norm  = self:_computeNormalizationFactor(fft_params.full_window_sample_count,
+    self.reassign_ring_applied_window[outed_ring_index+1],
+    self.reassign_ring_max_energy[outed_ring_index+1])
+
+    -- Read the data from the reassign function memory, use fft_param.fft_bin_buf which is available
+    DSP.fft_reassign_read_ring_slice_for_chan(chan, outed_ring_index, fft_params.fft_bin_buf)
+
+    -- fft_bin_buf holds the committed reassigned magnitudes (output of rolling push/flush)
+    DSP.fft_bins_to_db(fft_params.fft_bin_buf, full_norm, -90)
+    DSP.resample_curve(fft_params.bin_freq_buf, fft_params.fft_bin_buf, self.note_freq_buf, self.note_freq_energy_buf, false, "akima")
+
+    self.spectrograms[chan+1]:saveSlice(self.note_freq_energy_buf, outed_slice)
+end
+
+
 function SpectrumAnalysisContext:analyze()
     if not self.progress then
         -- First call to analyse
         -- Initialize state vars so that we can pause/resume the analysis
-        self.analysis_finished                  = false
+        self.analysis_finished     = false
 
-        self.energy_conservation_test_count     = 0
-        self.energy_conservation_test_success   = 0
+        self.energy_conservation_test_count   = 0
+        self.energy_conservation_test_success = 0
 
         self.progress    = {}
         self.progress.si = 0
@@ -275,7 +394,7 @@ function SpectrumAnalysisContext:getProgress()
     local prog = 0.1
 
     if not self.render_finished then return prog, math.floor(prog * 100) .. " % - Rendering..." end
-    if self.analysis_finished   then return 1,  "100 % - Finished" end
+    if self.analysis_finished   then return 1,    "100 % - Finished" end
 
     prog = prog + (1-prog) * self.progress.si / ( 1.0 * self.slice_count)
 
@@ -318,15 +437,17 @@ function SpectrumAnalysisContext:_performRMSE(chan_num, offset_center)
     return DSP.rmse(self.rmse_buf)
 end
 
--- Offset center is the offset of the central sample in the big sample serie (zeroes - samples - center - samples - zeroes)
-function SpectrumAnalysisContext:_prepareFFT(chan_num, offset_center)
-
+-- After this call, fft_params.x1_buf contains the complex FFT (re,im interleaved)
+-- and fft_params.fft_bin_buf contains the magnitude bins.
+function SpectrumAnalysisContext:_prepareAndPerformFFT(chan_num, offset_center, want_energy)
     local fft_params = self.fft_params
 
-    -- Clear the buffer so that it's zeroed
-    fft_params.buf.clear()
+    -- Clear the buffer so that it's zeroed.
+    -- The sample buf is of the size of the FFT, but there may be left samples inside
+    -- If we're on the borders, or if we apply zero padding
+    fft_params.sample_buf.clear()
 
-    local win             = fft_params.effective_window_sample_count
+    local win             = fft_params.effective_window_sample_count -- affected by zero padding
     local left_src_sample = math.floor(offset_center - 0.5 * win)
 
     -- Make sure we're ok on the left
@@ -339,72 +460,96 @@ function SpectrumAnalysisContext:_prepareFFT(chan_num, offset_center)
 
     -- Number of samples kept due to potential border problems
     local win_sample_count = right_src_sample - left_src_sample
+    local dst_offset       = math.floor(0.5 * (fft_params.full_window_sample_count - win_sample_count))
+    local src_offset       = left_src_sample
 
-    local dst_offset = math.floor(0.5 * (fft_params.full_window_sample_count - win_sample_count))
-    local src_offset = left_src_sample
-
-    if src_offset < 0 then
+    if dst_offset < 0 then
         error("Wrong use of the FFT !! Trying to get samples before the start of the sample serie.")
     end
 
     -- Get the samples into our temporary buffer
-    self.sample_accessor:getSamples(src_offset, win_sample_count, chan_num, self.fft_params.buf, dst_offset)
+    self.sample_accessor:getSamples(src_offset, win_sample_count, chan_num, fft_params.sample_buf, dst_offset)
 
-    fft_params.applied_window_sample_count  = win_sample_count
-    fft_params.max_energy                   = win_sample_count
-
+    -- Apply the windowing. Use the real number of samples in the buffer as window size.
+    -- The rest is zero pad, either asked by the user (zero padding), or due to border adjustment.
     local apply_windowing = true
+    local sig_energy, max_energy
     if apply_windowing then
-        -- Apply window on the full sample range
-        -- Max energy is the energy of a maximum signal to which we apply the window
-        fft_params.sig_energy, fft_params.max_energy = DSP.window_hann(fft_params.buf, dst_offset + 1, win_sample_count)
+        sig_energy, max_energy = DSP.window_hann(fft_params.sample_buf, dst_offset + 1, win_sample_count, self.params.reassignment, fft_params.x1_buf, fft_params.x2_buf, fft_params.x3_buf)
     else
-        fft_params.sig_energy, fft_params.max_energy = DSP.window_rect(fft_params.buf, dst_offset + 1, win_sample_count)
+        sig_energy, max_energy = DSP.window_rect(fft_params.sample_buf, dst_offset + 1, win_sample_count, self.params.reassignment, fft_params.x1_buf, fft_params.x2_buf, fft_params.x3_buf)
+    end
+
+    fft_params.applied_window_sample_count = win_sample_count
+    fft_params.sig_energy                  = sig_energy
+    fft_params.max_energy                  = max_energy
+
+    -- FFT in-place : contains complex spectrum (re,im interleaved)
+    fft_params.x1_buf.fft_real(#fft_params.x1_buf, true)
+
+    if self.params.reassignment then
+        -- We also need the FFTs of x2 and x3 for reassignements
+        fft_params.x2_buf.fft_real(#fft_params.x2_buf, true)
+        fft_params.x3_buf.fft_real(#fft_params.x3_buf, true)
+    end
+
+    if want_energy then
+        -- Compute magnitude bins
+        local fft_energy = DSP.fft_to_fft_bins(fft_params.x1_buf, fft_params.fft_bin_buf)
+
+        -- Energy conservation check (main window only)
+        self.energy_conservation_test_count = self.energy_conservation_test_count + 1
+        if math.abs(fft_energy - sig_energy) / fft_energy > 0.05 then
+            LOG.debug("Energy not conserved !! : FFT E vs BUF E : " .. fft_energy .. " / " .. sig_energy .. " (FFT Size : " .. fft_params.full_window_sample_count .. ")\n")
+        else
+            self.energy_conservation_test_success = self.energy_conservation_test_success + 1
+        end
+        fft_params.fft_energy = fft_energy
     end
 end
 
-function SpectrumAnalysisContext:_performFFT()
-    local fft_params = self.fft_params
+-- Computes the normalisation factor to be applied to the result of the FFT
+-- For bin magnitude to DB correction.
+-- Multiple factors are affecting the result that may vary accross the analysis
+--    -- Full window size : if we use more samples, there's more global energy in our global window, so we need to normalize things back
+--    -- Applied window size : Zero padding changes the size of the applied window and thus when we zero pad, less samples are used so the energy of the full window is lower and overall should be normalized
+--    -- Max energy : when we apply complex windows like Hann, we remove some global energy from the initial window. Max energy is the maximum energy that can be stored in that window.
+--
+-- fft_size                         : size of the window / total number of samples in time window
+-- applied_window_sample_count      : number of effective samples in time window (zero-padding /boundaries applied)
+-- max_energy                       : max possible energy after window is applied (all samples at 1)
+--
+--
+--              <--- applied -->
+--                 _________
+-- |           |__/         \__|          |
+-- |                                      |
+-- |<------------ Full window ----------->|
+--
 
-    fft_params.buf.fft_real(#fft_params.buf, true)
+function SpectrumAnalysisContext:_computeNormalizationFactor(full_window_size, applied_window_size, max_energy)
+   -- Normalize the results by applying various corrections.
+    local db_correction_6         = 0.25
+    -- Size of the fft window
+    local standard_normalisation  = full_window_size
+    -- Number of samples really used / fft size proportion (zero pad)
+    local zero_pad_normalisation  = applied_window_size / full_window_size
+    -- Windowing factor : when using a window the signal is modified, and thus the energy. Apply inverse correction.
+    local windowing_normalisation = max_energy / applied_window_size
 
-    -- Calculate FFT energies per bin + their sum
-    fft_params.fft_energy = DSP.fft_to_fft_bins(fft_params.buf, fft_params.fft_bin_buf)
+    zero_pad_normalisation        = zero_pad_normalisation * zero_pad_normalisation
 
-    self.energy_conservation_test_count = self.energy_conservation_test_count + 1;
+    local full_normalisation      = db_correction_6 * zero_pad_normalisation * standard_normalisation * windowing_normalisation
 
-    if math.abs(fft_params.fft_energy - fft_params.sig_energy)/fft_params.fft_energy > 0.05 then
-        LOG.debug("Energy not conserved !! : FFT E vs BUF E : " .. fft_params.fft_energy .. " / " .. fft_params.sig_energy ..  " (FFT Size : " .. fft_params.full_window_sample_count .. ")\n")
-    else
-        self.energy_conservation_test_success = self.energy_conservation_test_success + 1;
-    end
+    return full_normalisation
 end
 
 function SpectrumAnalysisContext:_normalizeFFT()
     -- Convert FFT bins to decibels and apply normalization
 
-    -- fft_size                         : size of the window / total number of samples in time window
-    -- applied_window_sample_count      : number of effective samples in time window (zero-padding /boundaries applied)
-    -- max_energy                       : max possible energy after window is applied (all samples at 1)
-
-    --              <--- applied -->
-    --                 _________
-    -- |           |__/         \__|          |
-
     local fft_params = self.fft_params
 
-    -- Normalize the results by applying various corrections.
-    local db_correction_6         = 0.25
-    -- Size of the fft window
-    local standard_normalisation  = fft_params.full_window_sample_count
-    -- Number of samples really used / fft size proportion (zero pad)
-    local zero_pad_normalisation  = fft_params.applied_window_sample_count / fft_params.full_window_sample_count
-    -- Windowing factor : when using a window the signal is modified, and thus the energy. Apply inverse correction.
-    local windowing_normalisation = fft_params.max_energy/fft_params.applied_window_sample_count
-
-    zero_pad_normalisation        = zero_pad_normalisation * zero_pad_normalisation
-
-    local full_normalisation      = db_correction_6 * zero_pad_normalisation * standard_normalisation * windowing_normalisation
+    local full_normalisation = self:_computeNormalizationFactor(fft_params.full_window_sample_count, fft_params.applied_window_sample_count, fft_params.max_energy)
 
     DSP.fft_bins_to_db(fft_params.fft_bin_buf, full_normalisation, -90)
 end
