@@ -178,10 +178,13 @@ local WINDOW_HANN = 0;
 local WINDOW_RECT = 1;
 
 -- Apply a window to the samples, and put the result into x1. If want_reassign, also calculates additional results in x2 and x3.
--- Window start is an index given in the samples_array, so it uses lua index norm (which is +1, that's why we remove 1 before going EEL)
--- Beware the window size may be different from the sample array size. This is because the samples may be zero padded
--- Due to forced zero-padding, or border clamping if we're on the start or the end of the analysis.
--- The window size should actually match the real number of samples in the buffer.
+-- The window size may be different from the sample array size, because effective samples may not fill the full buffer :
+--    - when the samples are on the borders of the record
+--    - when there's zero padding
+-- The window size matches the number of effective samples in the array, the effective samples should be centered in the array.
+-- Window start is the index of the first effective sample in the samples_array, 0 based (not lua based)
+-- @window_start integer 0-based
+-- @window_size size of the window
 local function sig_window(samples_array, window_type, window_start, window_size, want_reassign, x1_array, x2_array, x3_array)
 
     assert(window_size <= #samples_array, "Window size should be equal or smaller to the sample array")
@@ -192,7 +195,7 @@ local function sig_window(samples_array, window_type, window_start, window_size,
     local func = getOrCompileFunction("fft_window")
 
     ImGui.Function_SetValue(func, "_WINDOW_TYPE",      window_type)
-    ImGui.Function_SetValue(func, "_WINDOW_START",     window_start - 1)
+    ImGui.Function_SetValue(func, "_WINDOW_START",     window_start)
     ImGui.Function_SetValue(func, "_WINDOW_SIZE",      window_size)
     ImGui.Function_SetValue(func, "_WANT_REASSIGN",    want_reassign and 1 or 0)
     ImGui.Function_SetValue(func, "_SIZE",             #samples_array)
@@ -203,8 +206,7 @@ local function sig_window(samples_array, window_type, window_start, window_size,
     -- so put all samples after the coeffs.
     m:alloc(window_size) -- Hann coefficients
     m:alloc(window_size) -- Hann derivative coefficients
-    Function_SetValue_ArrayAt(func, "_SAMPLES",        samples_array, m:alloc(#samples_array))
-
+    Function_SetValue_ArrayAt(func, "_SAMPLES", samples_array, m:alloc(#samples_array))
     ImGui.Function_SetValue(func, "_X1", m:alloc(#samples_array))
     ImGui.Function_SetValue(func, "_X2", m:alloc(#samples_array))
     ImGui.Function_SetValue(func, "_X3", m:alloc(#samples_array))
@@ -508,7 +510,7 @@ local REASSIGN_OP_ADVANCE        = 2
 
 -- Initialize the rolling reassignment buffer.
 -- Must be called once (per channel) before any push/flush calls.
-local function fft_reassign_rolling_init(chan_count, rolling_width, bin_count, bin_fwidth, sample_rate, slice_step_s, window_full_size, window_effective_size)
+local function fft_reassign_rolling_init(chan_count, rolling_width, bin_count, bin_fwidth, sample_rate, slice_step_s)
     local func = getOrCompileFunction("fft_reassign_rolling")
 
     -- Useful vars
@@ -519,8 +521,6 @@ local function fft_reassign_rolling_init(chan_count, rolling_width, bin_count, b
     ImGui.Function_SetValue(func, "_BIN_FWIDTH",            bin_fwidth)
     ImGui.Function_SetValue(func, "_SAMPLE_RATE",           sample_rate)
     ImGui.Function_SetValue(func, "_SLICE_STEP_S",          slice_step_s)
-    ImGui.Function_SetValue(func, "_WINDOW_FULL_SIZE",      window_full_size)
-    ImGui.Function_SetValue(func, "_WINDOW_EFFECTIVE_SIZE", window_effective_size)
 
     -- Outputs
     ImGui.Function_SetValue(func, "_COMMITTED",          0)
@@ -530,10 +530,10 @@ local function fft_reassign_rolling_init(chan_count, rolling_width, bin_count, b
 
     -- This is the array memory map of the function, with all pointer adresses
     ImGui.Function_SetValue(func, "RING_BIN_MAG_REASSIGNED",    m:alloc(chan_count * bin_count * rolling_width ))
-    ImGui.Function_SetValue(func, "_IN_FFT_X1",                 m:alloc(chan_count * 2 * bin_count))
-    ImGui.Function_SetValue(func, "_IN_FFT_X2",                 m:alloc(chan_count * 2 * bin_count))
-    ImGui.Function_SetValue(func, "_IN_FFT_X3",                 m:alloc(chan_count * 2 * bin_count))
-    ImGui.Function_SetValue(func, "_IN_MAG_BASE",               m:alloc(chan_count * bin_count))
+    ImGui.Function_SetValue(func, "_IN_FFT_X1",                 m:alloc(2 * bin_count))
+    ImGui.Function_SetValue(func, "_IN_FFT_X2",                 m:alloc(2 * bin_count))
+    ImGui.Function_SetValue(func, "_IN_FFT_X3",                 m:alloc(2 * bin_count))
+    ImGui.Function_SetValue(func, "_IN_MAG_BASE",               m:alloc(bin_count))
 
     ImGui.Function_Execute(func)
 end
@@ -567,11 +567,17 @@ end
 
 -- Processes the temp buffers, and reassign energy into the rolling accumulator
 -- Should specify the current chan that is processed.
-local function fft_reassign_process_current_for_chan(chan, max_energy)
+local function fft_reassign_process_current_for_chan(chan, sig_energy, max_energy, window_full_size, window_effective_size)
     local func      = getOrCompileFunction("fft_reassign_rolling")
     ImGui.Function_SetValue(func, "_OP",        REASSIGN_OP_PROCESS)
     ImGui.Function_SetValue(func, "_IN_CHAN",   chan)
+
+    ImGui.Function_SetValue(func, "_WINDOW_FULL_SIZE",      window_full_size)
+    ImGui.Function_SetValue(func, "_WINDOW_EFFECTIVE_SIZE", window_effective_size)
+
+    ImGui.Function_SetValue(func, "_SIG_ENERGY", sig_energy)
     ImGui.Function_SetValue(func, "_MAX_ENERGY", max_energy)
+
     ImGui.Function_Execute(func)
 end
 

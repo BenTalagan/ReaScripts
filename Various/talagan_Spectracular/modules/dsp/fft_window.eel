@@ -66,7 +66,7 @@ function recalculate_hann_coeffs_if_needed()
         LAST_HANN_SIZE      = _WINDOW_SIZE;
     );
 
-    (_WANT_REASSIGN && LAST_HANN_DERIVATIVE_SIZE != _WINDOW_SIZE)?(
+    (_WANT_REASSIGN && (LAST_HANN_DERIVATIVE_SIZE != _WINDOW_SIZE))?(
 
         i       = 0;
         mult    = $pi/(_WINDOW_SIZE - 1);
@@ -102,7 +102,7 @@ function hann_window(samples)
 
     max_egy = 0;
     sig_egy = 0;
-    center  = _WINDOW_SIZE / 2;
+    center  = _SIZE / 2;
 
     i = 0;
     while(i < _WINDOW_SIZE) (

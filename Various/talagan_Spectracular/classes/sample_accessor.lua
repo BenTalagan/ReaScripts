@@ -95,7 +95,11 @@ function SampleAccessor:_advanceAndRead()
 end
 
 --- For the following function, indices are zero-based
---- @param dst reaper.array
+--- @param sample_num integer index of the first sample (0 based)
+--- @param sample_count integer number of samples to read
+--- @param chan_num integer channel to read
+--- @param dst reaper.array destination buffer
+--- @param dst_offset integer position in the destination buffer (0 based)
 function SampleAccessor:getSamples(sample_num, sample_count, chan_num, dst, dst_offset)
 
     if sample_num < self.sample_offset then

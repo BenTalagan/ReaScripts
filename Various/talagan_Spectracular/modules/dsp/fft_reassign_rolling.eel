@@ -29,18 +29,18 @@
 //
 // Arrays (OP_PUSH only, set as addresses) :
 //   RING_BIN_MAG_REASSIGNED        : current slice rolling buffers              (_W * _BIN_COUNT * _CHAN_COUNT)
-//   _IN_FFT_X1                     : current chan+slice complex FFT x1          (2 *_BIN_COUNT)
-//   _IN_FFT_X2                     : current chan+slice complex FFT x2          (2 *_BIN_COUNT)
-//   _IN_FFT_X3                     : current chan+slice complex FFT x3          (2 *_BIN_COUNT)
-//   _IN_MAG_BASE                   : current chan+slice input magnitude bins    (_BIN_COUNT)
+//   _IN_FFT_X1                     : current complex FFT x1          (2 *_BIN_COUNT)
+//   _IN_FFT_X2                     : current complex FFT x2          (2 *_BIN_COUNT)
+//   _IN_FFT_X3                     : current complex FFT x3          (2 *_BIN_COUNT)
+//   _IN_MAG_BASE                   : current input magnitude bins    (_BIN_COUNT)
 
 // For each memory space, channel data is not interleaved but as a whole block
 // The function memory is preset by the lua code.
 //
 // RING_BIN_MAG_REASSIGNED      | Slices for Chan 1 | Slices for Chan 2 | etc ...
-// _IN_FFT_X1                   | FFT Shifted for Chan 1 | FFT Shifted for Chan 2 | etc ...
-// _IN_FFT_X2                   | FFT Shifted for Chan 1 | FFT Shifted for Chan 2 | etc ...
-// _IN_FFT_X3                   | FFT Shifted for Chan 1 | FFT Shifted for Chan 2 | etc ...
+// _IN_FFT_X1
+// _IN_FFT_X2
+// _IN_FFT_X3
 // _IN_MAG_BASE
 
 // Rolling buffer management
@@ -48,24 +48,24 @@ function accumulation_rolling_buffer_start(chan)
 (
     RING_BIN_MAG_REASSIGNED + chan * _W * _BIN_COUNT
 );
-function accumulation_rolling_buffer_slot_address(chan, slot_num)
+function accumulation_rolling_buffer_slice_address(chan, slice_num)
 (
-    accumulation_rolling_buffer_start(chan) + slot_num * _BIN_COUNT
+    accumulation_rolling_buffer_start(chan) + slice_num * _BIN_COUNT
 );
-function zero_all_slots_all_channels()
+function zero_all_slices_all_channels()
     local(roll_end, i)
 (
     // Zeroify the whole accumulation ring for all slices, all bins, all chanels
-    roll_end       = _W * _BIN_COUNT * _CHAN_COUNT;
+    roll_end = _W * _BIN_COUNT * _CHAN_COUNT;
     i = 0;
     while(i < roll_end) ( RING_BIN_MAG_REASSIGNED[i] = 0; i += 1; );
 );
-function zero_slot_for_all_channels(slot_num)
+function zero_slice_for_all_channels(slice_num)
     local(ci, ptr, i)
 (
     ci = 0;
     while(ci < _CHAN_COUNT) (
-        ptr = accumulation_rolling_buffer_slot_address(ci, slot_num);
+        ptr = accumulation_rolling_buffer_slice_address(ci, slice_num);
         i   = 0;
         while(i < _BIN_COUNT) ( ptr[i] = 0; i += 1; );
     );
@@ -87,14 +87,13 @@ function init_rolling()
     TWO_PI_FWIDTH               = 2 * $pi * _BIN_FWIDTH;
     FFT_SIZE_OVER_TWO_PI        = (2 * _BIN_COUNT) / (2 * $pi);
     SAMPLES_PER_SLICE           = _SLICE_STEP_S * _SAMPLE_RATE;
-    WINDOW_SIZE_RATE            = (_WINDOW_EFFECTIVE_SIZE/_WINDOW_FULL_SIZE);
 
     // Global counters
     HEAD           = 0;
     PUSH_COUNT     = 0;
 
     // Zeroing
-    zero_all_slots_all_channels();
+    zero_all_slices_all_channels();
 );
 
 
@@ -106,8 +105,16 @@ function reassign_head(chan)
     next_slice_slot, slice_slot, slice_frac, slice_slot_f, freq_frac, freq_slot, freq_slot_f,
     t_correction_samples, freq_correction_bins, delta_slice,
     base_idx, ptr_chan_out,
-    mag_sq_floor)
+    window_size_rate,
+    mag_sq_floor,
+    use_reassignment, use_splat)
 (
+
+    use_reassignment = 1;
+    use_splat = 1;
+
+    // _SIG_ENERGY
+    // _MAX_ENERGY
 
     // Use incoming buffers directly
     ptr_x1          = _IN_FFT_X1;
@@ -115,15 +122,17 @@ function reassign_head(chan)
     ptr_x3          = _IN_FFT_X3;
     ptr_mag         = _IN_MAG_BASE;
 
-    mag_sq_floor    = pow(10, 0.1 * -90) * _MAX_ENERGY * _MAX_ENERGY;
-    mag_sq_floor    = 0;
+    window_size_rate    = (_WINDOW_EFFECTIVE_SIZE / _WINDOW_FULL_SIZE);
+    mag_sq_floor        = pow(10, 0.1 * -90) * _MAX_ENERGY * _MAX_ENERGY;
+    mag_sq_floor        = 0;
+    mag_sq_floor        = 0.000001 * _SIG_ENERGY;
 
     // Start adress for rolling buffers for this channel
     ptr_chan_out = accumulation_rolling_buffer_start(chan);
 
     k  = 0; // Bin counter
     ki = 0; // Complex component counter
-    while(k < _BIN_COUNT - 1) ( // Beware, we're using ki + 2 and + 3
+    while(k < _BIN_COUNT) (
 
         mag_base_k  = ptr_mag[k];
 
@@ -132,7 +141,7 @@ function reassign_head(chan)
         freq_slot   = k;    // No reassign
         freq_frac   = 0;
 
-        (mag_base_k > 0)?(
+        (use_reassignment)?(
 
             re1 = ptr_x1[ki];   im1 = ptr_x1[ki+1];
             re2 = ptr_x2[ki];   im2 = ptr_x2[ki+1];
@@ -144,7 +153,7 @@ function reassign_head(chan)
 
                 // Temporal reassignment : Re(F2/F1) in samples → delta_slice
                 t_correction_samples    = (re2*re1 + im2*im1) / mag_sq;
-                delta_slice             = t_correction_samples * WINDOW_SIZE_RATE / SAMPLES_PER_SLICE;
+                delta_slice             = t_correction_samples * window_size_rate / SAMPLES_PER_SLICE;
 
                 // Clamp the delta slice
                 (delta_slice >  HALF_W) ? (delta_slice =  HALF_W);
@@ -169,16 +178,19 @@ function reassign_head(chan)
         // The frequency does not fall on an exact bin. We want to split
         // The energy between the adjacent bins, based on their distance to the bins (4 nearest bins).
         // Let's do some bilinear interpolation
+        (use_splat)?(
+            next_slice_slot = (slice_slot + 1) % _W;
 
-        next_slice_slot = (slice_slot + 1) % _W;
-
-        (freq_slot >=0)?(
-            ptr_chan_out[slice_slot      * _BIN_COUNT + freq_slot] += mag_base_k * (1 - slice_frac) * (1 - freq_frac);
-            ptr_chan_out[next_slice_slot * _BIN_COUNT + freq_slot] += mag_base_k * slice_frac * (1 - freq_frac);
-        );
-        (freq_slot < _BIN_COUNT - 1)?(
-            ptr_chan_out[slice_slot      * _BIN_COUNT + (freq_slot + 1)] += mag_base_k * (1 - slice_frac) * freq_frac;
-            ptr_chan_out[next_slice_slot * _BIN_COUNT + (freq_slot + 1)] += mag_base_k * slice_frac * freq_frac
+            (freq_slot >=0)?(
+                ptr_chan_out[slice_slot      * _BIN_COUNT + freq_slot] += mag_base_k * (1 - slice_frac) * (1 - freq_frac);
+                ptr_chan_out[next_slice_slot * _BIN_COUNT + freq_slot] += mag_base_k * slice_frac * (1 - freq_frac);
+            );
+            (freq_slot < _BIN_COUNT - 1)?(
+                ptr_chan_out[slice_slot      * _BIN_COUNT + (freq_slot + 1)] += mag_base_k * (1 - slice_frac) * freq_frac;
+                ptr_chan_out[next_slice_slot * _BIN_COUNT + (freq_slot + 1)] += mag_base_k * slice_frac * freq_frac
+            );
+        ):(
+            ptr_chan_out[slice_slot * _BIN_COUNT + freq_slot] += mag_base_k;
         );
 
         k  += 1;
@@ -190,14 +202,13 @@ function advance()
     local(bi, ci, trail, start_addr)
 (
     // Zeroify the trail
-    (PUSH_COUNT > HALF_W)?(
-
+    (PUSH_COUNT >= HALF_W)?(
         trail  = HEAD - HALF_W;
         (trail < 0)?(trail += _W);
 
         ci = 0;
         while(ci < _CHAN_COUNT) (
-            start_addr = accumulation_rolling_buffer_slot_address(ci, trail);
+            start_addr = accumulation_rolling_buffer_slice_address(ci, trail);
 
             bi = 0;
             while(bi < _BIN_COUNT) (

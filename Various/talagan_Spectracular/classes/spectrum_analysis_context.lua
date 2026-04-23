@@ -221,7 +221,7 @@ function SpectrumAnalysisContext:_reinitReassignmentBuffers()
     self.reassign_roll_window          = 33
     self.reassign_roll_half_window     = math.floor(self.reassign_roll_window * 0.5)
 
-    DSP.fft_reassign_rolling_init(self.chan_count, self.reassign_roll_window, self.fft_params.bin_count, self.fft_params.bin_fwidth, self.sample_rate, self.slice_step_duration, self.fft_params.full_window_sample_count, self.fft_params.effective_window_sample_count )
+    DSP.fft_reassign_rolling_init(self.chan_count, self.reassign_roll_window, self.fft_params.bin_count, self.fft_params.bin_fwidth, self.sample_rate, self.slice_step_duration)
 
     -- Scalar rings for per-slice normalisation params (size W, indexed by si % W)
     self.reassign_ring_applied_window = {}
@@ -273,7 +273,7 @@ function SpectrumAnalysisContext:resumeAnalysis()
 
                 -- Step 3 : Now, FFT, shifted FFT and main BINs are all pushed into the temp buffers
                 -- Apply reassignment into accumulation buffers
-                DSP.fft_reassign_process_current_for_chan(ci-1, self.fft_params.max_energy) -- Beware lua index !
+                DSP.fft_reassign_process_current_for_chan(ci-1, self.fft_params.sig_energy, self.fft_params.max_energy, self.fft_params.full_window_sample_count, self.fft_params.effective_window_sample_count) -- Beware lua index !
 
             else
                 -- Normal pipeline
@@ -460,10 +460,10 @@ function SpectrumAnalysisContext:_prepareAndPerformFFT(chan_num, offset_center, 
 
     -- Number of samples kept due to potential border problems
     local win_sample_count = right_src_sample - left_src_sample
-    local dst_offset       = math.floor(0.5 * (fft_params.full_window_sample_count - win_sample_count))
+    local dst_offset       = math.floor(0.5 * (fft_params.full_window_sample_count - win_sample_count)) -- Center the samples.
     local src_offset       = left_src_sample
 
-    if dst_offset < 0 then
+    if src_offset < 0 then
         error("Wrong use of the FFT !! Trying to get samples before the start of the sample serie.")
     end
 
@@ -475,9 +475,9 @@ function SpectrumAnalysisContext:_prepareAndPerformFFT(chan_num, offset_center, 
     local apply_windowing = true
     local sig_energy, max_energy
     if apply_windowing then
-        sig_energy, max_energy = DSP.window_hann(fft_params.sample_buf, dst_offset + 1, win_sample_count, self.params.reassignment, fft_params.x1_buf, fft_params.x2_buf, fft_params.x3_buf)
+        sig_energy, max_energy = DSP.window_hann(fft_params.sample_buf, dst_offset, win_sample_count, self.params.reassignment, fft_params.x1_buf, fft_params.x2_buf, fft_params.x3_buf)
     else
-        sig_energy, max_energy = DSP.window_rect(fft_params.sample_buf, dst_offset + 1, win_sample_count, self.params.reassignment, fft_params.x1_buf, fft_params.x2_buf, fft_params.x3_buf)
+        sig_energy, max_energy = DSP.window_rect(fft_params.sample_buf, dst_offset, win_sample_count, self.params.reassignment, fft_params.x1_buf, fft_params.x2_buf, fft_params.x3_buf)
     end
 
     fft_params.applied_window_sample_count = win_sample_count
