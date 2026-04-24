@@ -28,7 +28,7 @@
 //   _SLICE_STEP_S : duration of one slice in seconds
 //
 // Arrays (OP_PUSH only, set as addresses) :
-//   RING_BIN_MAG_REASSIGNED        : current slice rolling buffers              (_W * _BIN_COUNT * _CHAN_COUNT)
+//   RING_BIN_MAG_REASSIGNED        : current slice rolling buffers   (_W * _BIN_COUNT * _CHAN_COUNT)
 //   _IN_FFT_X1                     : current complex FFT x1          (2 *_BIN_COUNT)
 //   _IN_FFT_X2                     : current complex FFT x2          (2 *_BIN_COUNT)
 //   _IN_FFT_X3                     : current complex FFT x3          (2 *_BIN_COUNT)
@@ -52,22 +52,31 @@ function accumulation_rolling_buffer_slice_address(chan, slice_num)
 (
     accumulation_rolling_buffer_start(chan) + slice_num * _BIN_COUNT
 );
-function zero_all_slices_all_channels()
+function zero_all_rolling_slices_all_channels()
     local(roll_end, i)
 (
     // Zeroify the whole accumulation ring for all slices, all bins, all chanels
     roll_end = _W * _BIN_COUNT * _CHAN_COUNT;
     i = 0;
-    while(i < roll_end) ( RING_BIN_MAG_REASSIGNED[i] = 0; i += 1; );
+    while(i < roll_end) (
+        RING_BIN_MAG_REASSIGNED[i] = 0;
+        i += 1;
+    );
 );
-function zero_slice_for_all_channels(slice_num)
+function zero_rolling_slice_for_all_channels(slice_num)
     local(ci, ptr, i)
 (
     ci = 0;
     while(ci < _CHAN_COUNT) (
         ptr = accumulation_rolling_buffer_slice_address(ci, slice_num);
+
         i   = 0;
-        while(i < _BIN_COUNT) ( ptr[i] = 0; i += 1; );
+        while(i < _BIN_COUNT) (
+            ptr[i] = 0;
+            i += 1;
+        );
+
+        ci += 1;
     );
 );
 
@@ -93,36 +102,40 @@ function init_rolling()
     PUSH_COUNT     = 0;
 
     // Zeroing
-    zero_all_slices_all_channels();
+    zero_all_rolling_slices_all_channels();
 );
 
+// External parameters:
+//
+// - _SIG_ENERGY
+// - _MAX_ENERGY
+// - _IN_FFT_X1 (feed)
+// - _IN_FFT_X2 (feed)
+// - _IN_FFT_X3 (feed)
 
 function reassign_head(chan)
     local(k, ki,
     ptr_x1, ptr_x2, ptr_x3, ptr_mag,
     mag_base_k, re1, re2, re3, im1, im2, im3,
     mag_sq,
-    next_slice_slot, slice_slot, slice_frac, slice_slot_f, freq_frac, freq_slot, freq_slot_f,
-    t_correction_samples, freq_correction_bins, delta_slice,
-    base_idx, ptr_chan_out,
+    next_slice_slot, slice_slot, slice_frac, slice_slot_f, bin_frac, bin_slot, bin_slot_f,
+    delta_slice, delta_bin,
+    ptr_chan_out,
     window_size_rate,
     mag_sq_floor,
     use_reassignment, use_splat)
 (
-
     use_reassignment = 1;
     use_splat = 1;
 
-    // _SIG_ENERGY
-    // _MAX_ENERGY
-
     // Use incoming buffers directly
-    ptr_x1          = _IN_FFT_X1;
-    ptr_x2          = _IN_FFT_X2;
-    ptr_x3          = _IN_FFT_X3;
-    ptr_mag         = _IN_MAG_BASE;
+    ptr_x1              = _IN_FFT_X1;
+    ptr_x2              = _IN_FFT_X2;
+    ptr_x3              = _IN_FFT_X3;
+    ptr_mag             = _IN_MAG_BASE;
 
     window_size_rate    = (_WINDOW_EFFECTIVE_SIZE / _WINDOW_FULL_SIZE);
+
     mag_sq_floor        = pow(10, 0.1 * -90) * _MAX_ENERGY * _MAX_ENERGY;
     mag_sq_floor        = 0;
     mag_sq_floor        = 0.000001 * _SIG_ENERGY;
@@ -138,8 +151,8 @@ function reassign_head(chan)
 
         slice_slot  = HEAD; // No reassign
         slice_frac  = 0;
-        freq_slot   = k;    // No reassign
-        freq_frac   = 0;
+        bin_slot   = k;    // No reassign
+        bin_frac   = 0;
 
         (use_reassignment)?(
 
@@ -152,8 +165,7 @@ function reassign_head(chan)
             (mag_sq > mag_sq_floor)?(
 
                 // Temporal reassignment : Re(F2/F1) in samples → delta_slice
-                t_correction_samples    = (re2*re1 + im2*im1) / mag_sq;
-                delta_slice             = t_correction_samples * window_size_rate / SAMPLES_PER_SLICE;
+                delta_slice             = (window_size_rate / SAMPLES_PER_SLICE) * (re2*re1 + im2*im1) / mag_sq;
 
                 // Clamp the delta slice
                 (delta_slice >  HALF_W) ? (delta_slice =  HALF_W);
@@ -167,11 +179,19 @@ function reassign_head(chan)
                 slice_frac   = slice_slot_f - slice_slot;
 
                 // Frequency reassignment : -Im(N/(2π) * F3/F1) in bins → dst
-                inst_freq_hz = k * _BIN_FWIDTH - SAMPLE_RATE_OVER_TWO_PI * (im3*re1 - re3*im1) / mag_sq;
+                (1)?(
+                    // Without confidence correction
+                    delta_bin = - FFT_SIZE_OVER_TWO_PI * (im3*re1 - re3*im1) / mag_sq;
+                ):(
+                    // With confidence correction
+                    mag_sq_3    = re3*re3 + im3*im3;
+                    confidence  = mag_sq / (mag_sq + mag_sq_3);
+                    delta_bin   = - confidence * FFT_SIZE_OVER_TWO_PI * (im3*re1 - re3*im1) / mag_sq;
+                );
 
-                freq_slot_f  = inst_freq_hz / _BIN_FWIDTH;
-                freq_slot    = floor(freq_slot_f);
-                freq_frac    = freq_slot_f - freq_slot;
+                bin_slot_f  = k + delta_bin;
+                bin_slot    = floor(bin_slot_f);
+                bin_frac    = bin_slot_f - bin_slot;
             );
         );
 
@@ -181,16 +201,16 @@ function reassign_head(chan)
         (use_splat)?(
             next_slice_slot = (slice_slot + 1) % _W;
 
-            (freq_slot >=0)?(
-                ptr_chan_out[slice_slot      * _BIN_COUNT + freq_slot] += mag_base_k * (1 - slice_frac) * (1 - freq_frac);
-                ptr_chan_out[next_slice_slot * _BIN_COUNT + freq_slot] += mag_base_k * slice_frac * (1 - freq_frac);
+            (bin_slot >=0)?(
+                ptr_chan_out[slice_slot      * _BIN_COUNT + bin_slot] += mag_base_k * (1 - slice_frac) * (1 - bin_frac);
+                ptr_chan_out[next_slice_slot * _BIN_COUNT + bin_slot] += mag_base_k * slice_frac * (1 - bin_frac);
             );
-            (freq_slot < _BIN_COUNT - 1)?(
-                ptr_chan_out[slice_slot      * _BIN_COUNT + (freq_slot + 1)] += mag_base_k * (1 - slice_frac) * freq_frac;
-                ptr_chan_out[next_slice_slot * _BIN_COUNT + (freq_slot + 1)] += mag_base_k * slice_frac * freq_frac
+            (bin_slot < _BIN_COUNT - 1)?(
+                ptr_chan_out[slice_slot      * _BIN_COUNT + (bin_slot + 1)] += mag_base_k * (1 - slice_frac) * bin_frac;
+                ptr_chan_out[next_slice_slot * _BIN_COUNT + (bin_slot + 1)] += mag_base_k * slice_frac * bin_frac
             );
         ):(
-            ptr_chan_out[slice_slot * _BIN_COUNT + freq_slot] += mag_base_k;
+            ptr_chan_out[slice_slot * _BIN_COUNT + bin_slot] += mag_base_k;
         );
 
         k  += 1;
@@ -206,25 +226,13 @@ function advance()
         trail  = HEAD - HALF_W;
         (trail < 0)?(trail += _W);
 
-        ci = 0;
-        while(ci < _CHAN_COUNT) (
-            start_addr = accumulation_rolling_buffer_slice_address(ci, trail);
-
-            bi = 0;
-            while(bi < _BIN_COUNT) (
-                start_addr[bi] = 0;
-                bi += 1;
-            );
-
-            ci += 1;
-        );
+        zero_rolling_slice_for_all_channels(trail);
     );
 
     // Now advance
     HEAD            = (HEAD + 1) % _W;
     PUSH_COUNT     += 1;
 );
-
 
 (_OP == OP_PROCESS)        ? ( reassign_head(_IN_CHAN) );
 (_OP == OP_ADVANCE)        ? ( advance() );

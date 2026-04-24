@@ -49,6 +49,8 @@ end
 
 function SpectrumAnalysisContext:_initialize(params)
     self.params = params
+
+    self.params.window_type = DSP.WINDOW_HANN
 end
 
 function SpectrumAnalysisContext:_buildAndRender()
@@ -134,9 +136,9 @@ function SpectrumAnalysisContext:_buildFFTParamsAndBuffers()
     local effective_window_sample_count     = sample_count - zero_padding_sample_count
 
     -- Number of bins in the FFT. Remember we're using fft_real so we need to divide by 2
-    local bin_count         = sample_count/2
+    local bin_count             = sample_count/2
     -- Bandwidth of an FFT bin
-    local bin_fwidth        = samplerate / sample_count
+    local bin_fwidth            = samplerate / sample_count
 
     -- Pre-allocate working buffers
     local sample_buf            = reaper.new_array(sample_count)
@@ -472,13 +474,7 @@ function SpectrumAnalysisContext:_prepareAndPerformFFT(chan_num, offset_center, 
 
     -- Apply the windowing. Use the real number of samples in the buffer as window size.
     -- The rest is zero pad, either asked by the user (zero padding), or due to border adjustment.
-    local apply_windowing = true
-    local sig_energy, max_energy
-    if apply_windowing then
-        sig_energy, max_energy = DSP.window_hann(fft_params.sample_buf, dst_offset, win_sample_count, self.params.reassignment, fft_params.x1_buf, fft_params.x2_buf, fft_params.x3_buf)
-    else
-        sig_energy, max_energy = DSP.window_rect(fft_params.sample_buf, dst_offset, win_sample_count, self.params.reassignment, fft_params.x1_buf, fft_params.x2_buf, fft_params.x3_buf)
-    end
+    local sig_energy, max_energy = DSP.apply_windowing(self.params.window_type, fft_params.sample_buf, dst_offset, win_sample_count, self.params.reassignment, fft_params.x1_buf, fft_params.x2_buf, fft_params.x3_buf)
 
     fft_params.applied_window_sample_count = win_sample_count
     fft_params.sig_energy                  = sig_energy

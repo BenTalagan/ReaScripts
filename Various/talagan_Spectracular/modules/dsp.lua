@@ -174,8 +174,9 @@ end
 
 -------------------------
 
-local WINDOW_HANN = 0;
-local WINDOW_RECT = 1;
+local WINDOW_HANN  = 1;
+local WINDOW_RECT  = 2;
+local WINDOW_GAUSS = 3;
 
 -- Apply a window to the samples, and put the result into x1. If want_reassign, also calculates additional results in x2 and x3.
 -- The window size may be different from the sample array size, because effective samples may not fill the full buffer :
@@ -185,7 +186,7 @@ local WINDOW_RECT = 1;
 -- Window start is the index of the first effective sample in the samples_array, 0 based (not lua based)
 -- @window_start integer 0-based
 -- @window_size size of the window
-local function sig_window(samples_array, window_type, window_start, window_size, want_reassign, x1_array, x2_array, x3_array)
+local function apply_windowing(window_type, samples_array, window_start, window_size, want_reassign, x1_array, x2_array, x3_array)
 
     assert(window_size <= #samples_array, "Window size should be equal or smaller to the sample array")
     assert(#x1_array == #samples_array, "Output X1 should be of same size as the input")
@@ -223,13 +224,6 @@ local function sig_window(samples_array, window_type, window_start, window_size,
     local max_energy    = ImGui.Function_GetValue(func, "_MAX_ENERGY")
 
     return sig_energy, max_energy
-end
-
-local function window_hann(samples_array, window_start, window_size, want_reassign, x1_array, x2_array, x3_array)
-    return sig_window(samples_array, WINDOW_HANN, window_start, window_size, want_reassign, x1_array, x2_array, x3_array)
-end
-local function window_rect(samples_array, window_start, window_size, want_reassign, x1_array, x2_array, x3_array)
-    return sig_window(samples_array, WINDOW_RECT, window_start, window_size, want_reassign, x1_array, x2_array, x3_array)
 end
 
 -------------------
@@ -662,8 +656,11 @@ return {
     array_interleave                = array_interleave,
     array_deinterleave              = array_deinterleave,
 
-    window_hann                     = window_hann,
-    window_rect                     = window_rect,
+    WINDOW_HANN                     = WINDOW_HANN,
+    WINDOW_RECT                     = WINDOW_RECT,
+    WINDOW_GAUSS                    = WINDOW_GAUSS,
+
+    apply_windowing                 = apply_windowing,
 
     rmse                            = rmse,
 

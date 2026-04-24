@@ -5,8 +5,9 @@
 
 // Modifies _SAMPLES by applying a window
 
-WINDOW_HANN = 0;
-WINDOW_RECT = 1;
+WINDOW_HANN     = 1;
+WINDOW_RECT     = 2;
+WINDOW_GAUSS    = 3;
 
 // A start offset and a size should be given :
 // This is useful if the samples are zero-padded and the real start is not 0 and the real window size is not the size of _SAMPLES
@@ -20,14 +21,13 @@ function malloc(size)
     ptr;
 );
 
-// Memory map
-HANN_COEFFS                 = malloc(_WINDOW_SIZE); // Precalculated hann coeffs, reusable from one round to the other for better performance
-HANN_DERIVATIVE_COEFFS      = malloc(_WINDOW_SIZE); // Precalculated hann coeffs, reusable from one round to the other for better performance
-_SAMPLES                    = malloc(_SIZE);        // Passed by the lua script.
-_X1                         = malloc(_SIZE);        // Output for the lua script.
-_X2                         = malloc(_SIZE);        // Output for the lua script.
-_X3                         = malloc(_SIZE);        // Output for the lua script.
-
+// Memory map. Needs to be recalculated each time.
+COEFFS                 = malloc(_WINDOW_SIZE); // Precalculated hann coeffs, reusable from one round to the other for better performance
+DERIVATIVE_COEFFS      = malloc(_WINDOW_SIZE); // Precalculated hann coeffs, reusable from one round to the other for better performance
+_SAMPLES               = malloc(_SIZE);        // Passed by the lua script.
+_X1                    = malloc(_SIZE);        // Output for the lua script.
+_X2                    = malloc(_SIZE);        // Output for the lua script.
+_X3                    = malloc(_SIZE);        // Output for the lua script.
 
 // Input :
 // -------
@@ -41,42 +41,85 @@ _X3                         = malloc(_SIZE);        // Output for the lua script
 // _ENERGY
 // _MAX_ENERGY
 
+PI_OVER_WINSIZE     = $pi/_WINDOW_SIZE;
+HALF_WINSIZE        = _WINDOW_SIZE / 2;
+SIGMA_NORMALIZED    = 0.4;
+SIGMA               = (SIGMA_NORMALIZED * HALF_WINSIZE);
+SIGMA2              = SIGMA * SIGMA;
+INV_SIGMA           = 1 / SIGMA;
+INV_SIGMA2          = 1 / SIGMA2;
+
+function calc_coeff(i)
+    local(s, ii)
+(
+    ii = (i+0.5); // use the center of the sample
+
+    (_WINDOW_TYPE == WINDOW_HANN)?(
+        // sin²(mult * x)
+        s = sin(ii * PI_OVER_WINSIZE);
+        s * s;
+    ):(
+    (_WINDOW_TYPE == WINDOW_GAUSS)?(
+        s = (ii - HALF_WINSIZE) * INV_SIGMA;
+        exp(-0.5 * s * s) ;
+    ):(
+    (_WINDOW_TYPE == WINDOW_RECT)?(
+        1;
+    )));
+);
+
+function calc_derivative(i)
+    local(ii)
+(
+    ii = (i+0.5); // use the center of the sample
+
+    (_WINDOW_TYPE == WINDOW_HANN)?(
+        // mult * sin(2 * mult * x)
+        PI_OVER_WINSIZE * sin(2 * ii * PI_OVER_WINSIZE);
+    ):(
+    (_WINDOW_TYPE == WINDOW_GAUSS)?(
+        - (ii - HALF_WINSIZE) * INV_SIGMA2 * COEFFS[i];
+    ):(
+    (_WINDOW_TYPE == WINDOW_RECT)?(
+        0;
+    )));
+);
+
 
 // Recalculate hann coeffs for our window.
 // We'll try to reuse them as much as possible accross calls to this EEL function
 // To avoid costy calculations
-function recalculate_hann_coeffs_if_needed()
-    local(i, s, mult)
+function recalculate_coeffs_if_needed()
+    local(i, s)
 (
 
     // Since we reuse the same function over and over again
     // Try to avoid recalculating costy coefficients along the spectrgograph
     // 99% of the time they will not change (except on the borders of the spectro)
-    (LAST_HANN_SIZE != _WINDOW_SIZE)?(
+    (LAST_SIZE != _WINDOW_SIZE || LAST_TYPE != _WINDOW_TYPE)?(
 
-        i       = 0;
-        mult    = $pi/(_WINDOW_SIZE - 1);
-
+        i = 0;
         while(i < _WINDOW_SIZE) (
-            s                 = sin(i * mult);
-            HANN_COEFFS[i]    = s * s; // sin²(mult * x)
+            COEFFS[i] = calc_coeff(i);
             i = i+1;
         );
 
-        LAST_HANN_SIZE      = _WINDOW_SIZE;
+        LAST_SIZE = _WINDOW_SIZE;
+        LAST_TYPE = _WINDOW_TYPE;
     );
 
-    (_WANT_REASSIGN && (LAST_HANN_DERIVATIVE_SIZE != _WINDOW_SIZE))?(
+    (_WANT_REASSIGN)?(
+        (LAST_DERIVATIVE_SIZE != _WINDOW_SIZE || LAST_DERIVATIVE_TYPE != _WINDOW_TYPE)?(
 
-        i       = 0;
-        mult    = $pi/(_WINDOW_SIZE - 1);
+            i = 0;
+            while(i < _WINDOW_SIZE) (
+                DERIVATIVE_COEFFS[i] = calc_derivative(i);
+                i = i+1;
+            );
 
-        while(i < _WINDOW_SIZE) (
-            HANN_DERIVATIVE_COEFFS[i] = mult * sin(2 * i * mult); // mult * sin(2 * mult * x)
-            i = i+1;
+            LAST_DERIVATIVE_SIZE = _WINDOW_SIZE;
+            LAST_DERIVATIVE_TYPE = _WINDOW_TYPE;
         );
-
-        LAST_HANN_DERIVATIVE_SIZE = _WINDOW_SIZE;
     );
 );
 
@@ -93,15 +136,14 @@ function clear_outputs()
     );
 );
 
-function hann_window(samples)
-    local(i, coeff, idx, sample, new_sample, center)
+function apply_window()
+    local(i, s)
 (
     clear_outputs();
+    recalculate_coeffs_if_needed();
 
-    recalculate_hann_coeffs_if_needed();
-
-    max_egy = 0;
     sig_egy = 0;
+    max_egy = 0;
     center  = _SIZE / 2;
 
     i = 0;
@@ -113,22 +155,22 @@ function hann_window(samples)
         // X3[idx] = dcoeff * sample <- 0
         idx          = _WINDOW_START + i;
 
-        coeff        = HANN_COEFFS[i]; // sin²
-        sample       = samples[idx];
+        coeff        = COEFFS[i];
+        sample       = _SAMPLES[idx];
         new_sample   = coeff * sample;
 
         // Since we apply windowing, the max energy of a signal on this window
         // is affected. Perform a calculation to know how it is affected (should be squared to get the magnitude)
         // Use samples with amplitude 1 as reference.
-        max_egy      = max_egy + coeff;
         sig_egy      = sig_egy + (new_sample * new_sample);
+        max_egy      = max_egy + (coeff * coeff);
 
         _X1[idx]     = new_sample;
 
         (_WANT_REASSIGN)?(
             // We also need to send back X2 and X3
             _X2[idx] = (idx - center) * _X1[idx];
-            _X3[idx] = sample * HANN_DERIVATIVE_COEFFS[i];
+            _X3[idx] = sample * DERIVATIVE_COEFFS[i];
         );
 
         i = i + 1;
@@ -138,30 +180,5 @@ function hann_window(samples)
     _MAX_ENERGY = max_egy;
 );
 
-function rect_window(samples)
-    local(i, s)
-(
-    clear_outputs();
+apply_window();
 
-    sig_egy = 0;
-    max_egy = 0;
-
-    i = 0;
-    while(i < _WINDOW_SIZE) (
-        idx     = _WINDOW_START + i;
-        s       = samples[idx];
-
-        sig_egy = sig_egy + (s * s);
-        max_egy = max_egy + (1 * 1);
-
-        _X1[idx] = s;
-
-        i = i + 1;
-    );
-
-    _ENERGY     = sig_egy;
-    _MAX_ENERGY = max_egy;
-);
-
-(_WINDOW_TYPE == WINDOW_HANN)?(hann_window(_SAMPLES));
-(_WINDOW_TYPE == WINDOW_RECT)?(rect_window(_SAMPLES));
