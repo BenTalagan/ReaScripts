@@ -177,6 +177,7 @@ end
 local WINDOW_HANN  = 1;
 local WINDOW_RECT  = 2;
 local WINDOW_GAUSS = 3;
+local WINDOW_BLACKMAN = 4;
 
 -- Apply a window to the samples, and put the result into x1. If want_reassign, also calculates additional results in x2 and x3.
 -- The window size may be different from the sample array size, because effective samples may not fill the full buffer :
@@ -659,6 +660,7 @@ return {
     WINDOW_HANN                     = WINDOW_HANN,
     WINDOW_RECT                     = WINDOW_RECT,
     WINDOW_GAUSS                    = WINDOW_GAUSS,
+    WINDOW_BLACKMAN                 = WINDOW_BLACKMAN,
 
     apply_windowing                 = apply_windowing,
 

@@ -83,7 +83,7 @@ end
 
 local function timeResolutionWidget(ctx)
     ImGui.SetNextItemWidth(ctx, 80)
-    local b, v = ImGui.SliderInt(ctx, "Time Res", S.instance_params.time_resolution_ms, 10, 50, "%d ms")
+    local b, v = ImGui.SliderInt(ctx, "Time Res", S.instance_params.time_resolution_ms, 5, 50, "%d ms")
     if b then
         S.setSetting("TimeResolution", v)
         S.instance_params.time_resolution_ms = v

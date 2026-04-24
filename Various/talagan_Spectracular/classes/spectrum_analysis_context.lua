@@ -50,7 +50,7 @@ end
 function SpectrumAnalysisContext:_initialize(params)
     self.params = params
 
-    self.params.window_type = DSP.WINDOW_HANN
+    self.params.window_type = DSP.WINDOW_BLACKMAN
 end
 
 function SpectrumAnalysisContext:_buildAndRender()

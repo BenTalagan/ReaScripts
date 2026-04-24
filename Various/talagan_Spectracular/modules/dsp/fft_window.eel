@@ -8,6 +8,8 @@
 WINDOW_HANN     = 1;
 WINDOW_RECT     = 2;
 WINDOW_GAUSS    = 3;
+WINDOW_BLACKMAN = 4;
+
 
 // A start offset and a size should be given :
 // This is useful if the samples are zero-padded and the real start is not 0 and the real window size is not the size of _SAMPLES
@@ -63,13 +65,16 @@ function calc_coeff(i)
         s = (ii - HALF_WINSIZE) * INV_SIGMA;
         exp(-0.5 * s * s) ;
     ):(
+    (_WINDOW_TYPE == WINDOW_BLACKMAN)?(
+        0.42 - 0.5 * cos(2 * ii * PI_OVER_WINSIZE) + 0.08 * cos(4 * ii * PI_OVER_WINSIZE);
+    ):(
     (_WINDOW_TYPE == WINDOW_RECT)?(
         1;
-    )));
+    ))));
 );
 
 function calc_derivative(i)
-    local(ii)
+    local(ii, a)
 (
     ii = (i+0.5); // use the center of the sample
 
@@ -80,9 +85,13 @@ function calc_derivative(i)
     (_WINDOW_TYPE == WINDOW_GAUSS)?(
         - (ii - HALF_WINSIZE) * INV_SIGMA2 * COEFFS[i];
     ):(
+    (_WINDOW_TYPE == WINDOW_BLACKMAN)?(
+        a = 2 * PI_OVER_WINSIZE * ii;
+        PI_OVER_WINSIZE * (sin(a)- 0.32 * sin(2 * a));
+    ):(
     (_WINDOW_TYPE == WINDOW_RECT)?(
         0;
-    )));
+    ))));
 );
 
 
