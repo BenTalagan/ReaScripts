@@ -94,10 +94,10 @@ function SampleAccessor:_advanceAndRead()
     self:_readFront()
 end
 
---- For the following function, indices are zero-based
+--- For the following function, samples indices are zero-based
 --- @param sample_num integer index of the first sample (0 based)
 --- @param sample_count integer number of samples to read
---- @param chan_num integer channel to read
+--- @param chan_num integer channel to read, 1-based
 --- @param dst reaper.array destination buffer
 --- @param dst_offset integer position in the destination buffer (0 based)
 function SampleAccessor:getSamples(sample_num, sample_count, chan_num, dst, dst_offset)

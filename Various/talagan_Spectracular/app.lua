@@ -43,7 +43,8 @@ local function build_spectrum_context()
         rms_window            = S.instance_params.rms_window,
         zero_padding_percent  = S.instance_params.zero_padding_percent,
         reassignment          = S.instance_params.reassignment,
-        dbmin                 = S.instance_params.dbmin
+        fft_window_type       = S.instance_params.fft_window_type,
+        dbmin                 = S.instance_params.dbmin,
     }
 
     if S.instance_params.keep_time_selection and spectrum_context then
@@ -176,6 +177,34 @@ local function RMSWidget(ctx)
     end
 end
 
+
+local function FFTWindowWidget(ctx)
+    ImGui.SetNextItemWidth(ctx, 100)
+    local combo_items = { 'Hann', 'Blackman'}
+
+    if ImGui.BeginCombo(ctx, 'Window', "" .. DSP.WindowTypeEnumToName(S.instance_params.fft_window_type)) then
+      for i, v in ipairs(combo_items) do
+        local e_val         = DSP.WindowTypeNameToEnum(v)
+        local is_selected   = (e_val == S.instance_params.fft_window_type)
+
+        if ImGui.Selectable(ctx, combo_items[i], is_selected) then
+            S.instance_params.fft_window_type = e_val
+            S.setSetting("FFTWindowType", S.instance_params.fft_window_type)
+        end
+        if is_selected then
+          ImGui.SetItemDefaultFocus(ctx)
+        end
+      end
+      ImGui.EndCombo(ctx)
+    end
+    TT(ctx, "FFT Window Type")
+
+    if ImGui.IsItemHovered(ctx) and ImGui.IsMouseClicked(ctx, ImGui.MouseButton_Right) then
+        S.resetSetting("FFTWindowType")
+        S.instance_params.fft_window_type = S.getSetting("FFTWindowType")
+    end
+end
+
 local function refreshOptionsWidgets(ctx)
     local v, b = ImGui.Checkbox(ctx, "Keep time sel", S.instance_params.keep_time_selection)
     if v then
@@ -209,7 +238,6 @@ local function refreshOptionsWidgets(ctx)
     if v then
         S.instance_params.reassignment = b
         S.setSetting("Reassignment", b)
-        want_refresh = true
     end
     TT(ctx, "Spectral reassignment : sharpens the spectrogram by relocating each bin's energy\n\z
              to its instantaneous frequency instead of the nominal bin frequency.\n\z
@@ -229,6 +257,8 @@ local function drawBottomSettings(ctx)
     FFTWidget(ctx)
     SL(ctx)
     zeroPaddingWidget(ctx)
+    SL(ctx)
+    FFTWindowWidget(ctx)
     SL(ctx)
     RMSWidget(ctx)
 

@@ -49,8 +49,6 @@ end
 
 function SpectrumAnalysisContext:_initialize(params)
     self.params = params
-
-    self.params.window_type = DSP.WINDOW_BLACKMAN
 end
 
 function SpectrumAnalysisContext:_buildAndRender()
@@ -474,7 +472,7 @@ function SpectrumAnalysisContext:_prepareAndPerformFFT(chan_num, offset_center, 
 
     -- Apply the windowing. Use the real number of samples in the buffer as window size.
     -- The rest is zero pad, either asked by the user (zero padding), or due to border adjustment.
-    local sig_energy, max_energy = DSP.apply_windowing(self.params.window_type, fft_params.sample_buf, dst_offset, win_sample_count, self.params.reassignment, fft_params.x1_buf, fft_params.x2_buf, fft_params.x3_buf)
+    local sig_energy, max_energy = DSP.apply_windowing(self.params.fft_window_type, fft_params.sample_buf, dst_offset, win_sample_count, self.params.reassignment, fft_params.x1_buf, fft_params.x2_buf, fft_params.x3_buf)
 
     fft_params.applied_window_sample_count = win_sample_count
     fft_params.sig_energy                  = sig_energy
@@ -524,20 +522,21 @@ end
 --
 
 function SpectrumAnalysisContext:_computeNormalizationFactor(full_window_size, applied_window_size, max_energy)
-   -- Normalize the results by applying various corrections.
-    local db_correction_6         = 0.25
-    -- Size of the fft window
+
+    -- -- Normalize the results by applying various corrections.
+    -- local custom_correction       = 1
+    -- -- Number of samples really used / fft size proportion (zero pad)
+    -- -- This is a bad idea
+    -- local zero_pad_normalisation  = applied_window_size / full_window_size
+--
+    -- -- Size of the fft window
     local standard_normalisation  = full_window_size
-    -- Number of samples really used / fft size proportion (zero pad)
-    local zero_pad_normalisation  = applied_window_size / full_window_size
-    -- Windowing factor : when using a window the signal is modified, and thus the energy. Apply inverse correction.
+    -- -- Windowing factor : when using a window the signal is modified, and thus the energy. Apply inverse correction.
     local windowing_normalisation = max_energy / applied_window_size
+--
+    -- local full_normalisation      = custom_correction * zero_pad_normalisation * standard_normalisation * windowing_normalisation
 
-    zero_pad_normalisation        = zero_pad_normalisation * zero_pad_normalisation
-
-    local full_normalisation      = db_correction_6 * zero_pad_normalisation * standard_normalisation * windowing_normalisation
-
-    return full_normalisation
+    return max_energy -- standard_normalisation * windowing_normalisation
 end
 
 function SpectrumAnalysisContext:_normalizeFFT()

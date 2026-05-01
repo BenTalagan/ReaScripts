@@ -178,7 +178,7 @@ function apply_window()
 
         (_WANT_REASSIGN)?(
             // We also need to send back X2 and X3
-            _X2[idx] = (idx - center) * _X1[idx];
+            _X2[idx] = (idx + 0.5 - center) * _X1[idx];
             _X3[idx] = sample * DERIVATIVE_COEFFS[i];
         );
 

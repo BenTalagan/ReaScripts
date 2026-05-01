@@ -126,7 +126,8 @@ function reassign_head(chan)
     use_reassignment, use_splat)
 (
     use_reassignment = 1;
-    use_splat = 1;
+    use_splat = 0;
+    use_confidence = 0;
 
     // Use incoming buffers directly
     ptr_x1              = _IN_FFT_X1;
@@ -137,8 +138,8 @@ function reassign_head(chan)
     window_size_rate    = (_WINDOW_EFFECTIVE_SIZE / _WINDOW_FULL_SIZE);
 
     mag_sq_floor        = pow(10, 0.1 * -90) * _MAX_ENERGY * _MAX_ENERGY;
-    mag_sq_floor        = 0;
     mag_sq_floor        = 0.000001 * _SIG_ENERGY;
+    mag_sq_floor        = 0;
 
     // Start adress for rolling buffers for this channel
     ptr_chan_out = accumulation_rolling_buffer_start(chan);
@@ -162,7 +163,7 @@ function reassign_head(chan)
 
             mag_sq = re1*re1 + im1*im1;
 
-            (mag_sq > mag_sq_floor)?(
+            (mag_sq >= mag_sq_floor)?(
 
                 // Temporal reassignment : Re(F2/F1) in samples → delta_slice
                 delta_slice             = (window_size_rate / SAMPLES_PER_SLICE) * (re2*re1 + im2*im1) / mag_sq;
@@ -179,14 +180,14 @@ function reassign_head(chan)
                 slice_frac   = slice_slot_f - slice_slot;
 
                 // Frequency reassignment : -Im(N/(2π) * F3/F1) in bins → dst
-                (1)?(
-                    // Without confidence correction
-                    delta_bin = - FFT_SIZE_OVER_TWO_PI * (im3*re1 - re3*im1) / mag_sq;
-                ):(
+                (use_confidence)?(
                     // With confidence correction
                     mag_sq_3    = re3*re3 + im3*im3;
                     confidence  = mag_sq / (mag_sq + mag_sq_3);
                     delta_bin   = - confidence * FFT_SIZE_OVER_TWO_PI * (im3*re1 - re3*im1) / mag_sq;
+                ):(
+                    // Without confidence correction
+                    delta_bin = - FFT_SIZE_OVER_TWO_PI * (im3*re1 - re3*im1) / mag_sq;
                 );
 
                 bin_slot_f  = k + delta_bin;

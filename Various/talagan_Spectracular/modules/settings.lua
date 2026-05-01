@@ -8,6 +8,8 @@
 local AppName         = 'Spectracular!'
 local ExtstateRootKey = "TalaganSpectracular"
 
+local DSP             = require "modules.dsp"
+
 local SettingDefs = {
   UseDebugger         = { type = "bool",    default = false },
   UseProfiler         = { type = "bool",    default = false },
@@ -17,6 +19,7 @@ local SettingDefs = {
   RMSDbMax            = { type = "int",     default = 0 },
   TimeResolution      = { type = "int",     default = 15 },
   FFTSize             = { type = "int",     default = 8192 },
+  FFTWindowType       = { type = "int",     default = DSP.WINDOW_HANN },
   ZeroPaddingPercent  = { type = "int",     default = 0 },
   RMSWindow           = { type = "int",     default = 1024},
   KeepTimeSelection   = { type = "bool",    default = false },
@@ -118,6 +121,7 @@ local instance_params = {
   rms_dbmax           = getSetting("RMSDbMax"),
   time_resolution_ms  = getSetting("TimeResolution"),
   fft_size            = getSetting("FFTSize"),
+  fft_window_type     = getSetting("FFTWindowType"),
   rms_window          = getSetting("RMSWindow"),
   auto_refresh        = getSetting("AutoRefresh"),
   reassignment        = getSetting("Reassignment")

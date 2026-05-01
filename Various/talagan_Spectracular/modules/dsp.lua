@@ -584,7 +584,7 @@ local function fft_reassign_read_ring_slice_for_chan(chan, ring_slice_num, out_b
 
     assert(#out_buf == bin_count, "Trying to copy buffer into memory with wrong size !")
 
-    ImGui.Function_SetValue(func, "_DST_CPY_ADDR", ring_addr + (chan * roll_width + ring_slice_num) * bin_count  )
+    ImGui.Function_SetValue(func,       "_DST_CPY_ADDR", ring_addr + (chan * roll_width + ring_slice_num) * bin_count  )
     ImGui.Function_GetValue_Array(func, "_DST_CPY_ADDR", out_buf)
 end
 
@@ -632,6 +632,28 @@ local function analysis_data_to_rgb_array(spectrograms, coeffs, rgb_result, db_m
 
     ImGui.Function_GetValue_Array(func, "_PIXELS", rgb_result)
 end
+
+local function WindowTypeNameToEnum(type)
+    if type == 'Hann' then
+        return WINDOW_HANN
+    elseif type == 'Blackman' then
+        return WINDOW_BLACKMAN
+    else
+        error("Developer error : forgot to implement conversion for type " .. type)
+    end
+end
+
+
+local function WindowTypeEnumToName(type)
+    if type == WINDOW_HANN then
+        return 'Hann'
+    elseif type == WINDOW_BLACKMAN then
+        return 'Blackman'
+    else
+        error("Developer error : forgot to implement conversion for type " .. type)
+    end
+end
+
 
 ----------------------------------------------------------------
 
@@ -683,6 +705,9 @@ return {
 
     fft_reassign_process_current_for_chan   = fft_reassign_process_current_for_chan,
     fft_reassign_advance                    = fft_reassign_advance,
+
+    WindowTypeNameToEnum                    = WindowTypeNameToEnum,
+    WindowTypeEnumToName                    = WindowTypeEnumToName,
 
     fft_reassign_read_ring_slice_for_chan   = fft_reassign_read_ring_slice_for_chan
 }
